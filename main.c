@@ -188,6 +188,7 @@ static bool is_valid_application(uint32_t *app_location)
 
 int load_firmware_by_path(const char *path)
 {
+    text_directory_ui_set_status("STAT: loading app...");
 
     // Attempt to load the application from the SD card
     // bool load_success = load_program(FIRMWARE_PATH);
@@ -198,6 +199,8 @@ int load_firmware_by_path(const char *path)
 
     // Check if there is an already valid application in flash
     bool has_valid_app = is_valid_application(app_location);
+
+
 
     if (load_success || has_valid_app)
     {
@@ -245,6 +248,8 @@ void final_selection_callback(const char *path)
 
     snprintf(status_message, sizeof(status_message), "SEL: %s", path);
     text_directory_ui_set_status(status_message);
+
+    sleep_ms(200);
 
     load_firmware_by_path(path);
 }
