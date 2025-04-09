@@ -118,6 +118,22 @@ extern void lcd_putc(uint8_t devn, uint8_t c);
 extern int  lcd_getc(uint8_t devn);
 extern void lcd_sleeping(uint8_t devn);
 
+
+void draw_rect_spi(int x1, int y1, int x2, int y2, int c);
+void define_region_spi(int xstart, int ystart, int xend, int yend, int rw);
+void draw_line_spi(int x1, int y1, int x2, int y2, int color);
+void lcd_print_string_color(char *s, int fg, int bg);
+
+//Print the bitmap of a char on the video output
+//    x, y - the top left of the char
+//    width, height - size of the char's bitmap
+//    scale - how much to scale the bitmap
+//	  fc, bc - foreground and background colour
+//    bitmap - pointer to the bitmap
+void draw_bitmap_spi(int x1, int y1, int width, int height, int scale, int fc, int bc, unsigned char *bitmap);
+void draw_buffer_spi(int x1, int y1, int x2, int y2, unsigned char *p);
+
+
 extern char lcd_put_char(char c, int flush);
 extern void lcd_print_string(char* s);
 
@@ -127,5 +143,6 @@ extern void lcd_clear();
 extern void reset_controller(void);
 extern void pin_set_bit(int pin, unsigned int offset);
 
+extern void lcd_set_cursor(int x, int y);
 
 #endif

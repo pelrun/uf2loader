@@ -30,13 +30,14 @@
 
 
 
+// PicoCalc SD Firmware Loader 
+// SD_BOOT_FLASH_OFFSET is the offset in flash memory where the bootloader starts
+// This is typically set to 256KB for the Raspberry Pi Pico
+// This offset is used to ensure that the bootloader does not get overwritten
+// when loading a new application from the SD card
 #if !defined(SD_BOOT_FLASH_OFFSET)
 #define SD_BOOT_FLASH_OFFSET         (256 * 1024)
 #endif
-
-// Path to the firmware update file on the SD card
-#define FIRMWARE_PATH                "/sd/firmware.bin"
-// #define FIRMWARE_PATH                "/sd/firmware_no_offset.bin"
 
 // Maximum size of the application that can be loaded
 // This ensures we don't overwrite the bootloader itself

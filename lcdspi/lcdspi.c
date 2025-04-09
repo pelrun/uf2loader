@@ -10,7 +10,7 @@
 #include "lcdspi.h"
 #include "i2ckbd.h"
 #include "pico/multicore.h"
-////////////////////**************************************fonts
+// Fonts
 
 #include "fonts/font1.h"
 unsigned char *MainFont = (unsigned char *) font1;
@@ -19,8 +19,8 @@ static int gui_fcolour;
 static int gui_bcolour;
 static short current_x = 0, current_y = 0; // the current default position for the next char to be written
 static short gui_font_width, gui_font_height;
-static short hres = 0;
-static short vres = 0;
+static short hres = 320; // Horizontal resolution for ILI9488
+static short vres = 320; // Vertical resolution for ILI9488
 static char s_height;
 static char s_width;
 int lcd_char_pos = 0;
@@ -51,6 +51,19 @@ void __not_in_flash_func(spi_finish)(spi_inst_t *spi) {
     spi_get_hw(spi)->icr = SPI_SSPICR_RORIC_BITS;
 }
 
+void draw_line_spi(int x1, int y1, int x2, int y2, int color) {
+    int dx = abs(x2 - x1), sx = x1 < x2 ? 1 : -1;
+    int dy = abs(y2 - y1), sy = y1 < y2 ? 1 : -1;
+    int err = (dx > dy ? dx : -dy) / 2, e2;
+
+    while (1) {
+        draw_rect_spi(x1, y1, x1, y1, color); // Draw a single pixel
+        if (x1 == x2 && y1 == y2) break;
+        e2 = err;
+        if (e2 > -dx) { err -= dy; x1 += sx; }
+        if (e2 < dy) { err += dx; y1 += sy; }
+    }
+}
 void set_font() {
 
     gui_font_width = MainFont[0];
@@ -63,14 +76,14 @@ void set_font() {
 void define_region_spi(int xstart, int ystart, int xend, int yend, int rw) {
     unsigned char coord[4];
     lcd_spi_lower_cs();
-    gpio_put(Pico_LCD_DC, 0);//gpio_put(Pico_LCD_DC,0);
+    gpio_put(Pico_LCD_DC, 0);
     hw_send_spi(&(uint8_t) {ILI9341_COLADDRSET}, 1);
     gpio_put(Pico_LCD_DC, 1);
     coord[0] = xstart >> 8;
     coord[1] = xstart;
     coord[2] = xend >> 8;
     coord[3] = xend;
-    hw_send_spi(coord, 4);//		HAL_SPI_Transmit(&hspi3,coord,4,500);
+    hw_send_spi(coord, 4);
     gpio_put(Pico_LCD_DC, 0);
     hw_send_spi(&(uint8_t) {ILI9341_PAGEADDRSET}, 1);
     gpio_put(Pico_LCD_DC, 1);
@@ -78,7 +91,7 @@ void define_region_spi(int xstart, int ystart, int xend, int yend, int rw) {
     coord[1] = ystart;
     coord[2] = yend >> 8;
     coord[3] = yend;
-    hw_send_spi(coord, 4);//		HAL_SPI_Transmit(&hspi3,coord,4,500);
+    hw_send_spi(coord, 4);
     gpio_put(Pico_LCD_DC, 0);
     if (rw) {
         hw_send_spi(&(uint8_t) {ILI9341_MEMORYWRITE}, 1);
@@ -91,7 +104,6 @@ void define_region_spi(int xstart, int ystart, int xend, int yend, int rw) {
 void read_buffer_spi(int x1, int y1, int x2, int y2, unsigned char *p) {
     int r, N, t;
     unsigned char h, l;
-//	PInt(x1);PIntComma(y1);PIntComma(x2);PIntComma(y2);PRet();
     // make sure the coordinates are kept within the display area
     if (x2 <= x1) {
         t = x1;
@@ -115,9 +127,7 @@ void read_buffer_spi(int x1, int y1, int x2, int y2, unsigned char *p) {
 
     define_region_spi(x1, y1, x2, y2, 0);
 
-    //spi_init(Pico_LCD_SPI_MOD, 6000000);
     spi_set_baudrate(Pico_LCD_SPI_MOD, 6000000);
-    //spi_read_data_len(p, 1);
     hw_read_spi((uint8_t *) p, 1);
     r = 0;
     hw_read_spi((uint8_t *) p, N);
@@ -137,12 +147,10 @@ void read_buffer_spi(int x1, int y1, int x2, int y2, unsigned char *p) {
 }
 
 void draw_buffer_spi(int x1, int y1, int x2, int y2, unsigned char *p) {
-    union colourmap {
-        char rgbbytes[4];
-        unsigned int rgb;
-    } c;
-    unsigned char q[3];
     int i, t;
+    unsigned char q[3];
+    
+    // Boundary checking
     if (x2 <= x1) {
         t = x1;
         x1 = x2;
@@ -161,23 +169,40 @@ void draw_buffer_spi(int x1, int y1, int x2, int y2, unsigned char *p) {
     if (y1 >= vres) y1 = vres - 1;
     if (y2 < 0) y2 = 0;
     if (y2 >= vres) y2 = vres - 1;
-    i = (x2 - x1 + 1) * (y2 - y1 + 1);
+    
+    // Calculate total number of pixels
+    int pixelCount = (x2 - x1 + 1) * (y2 - y1 + 1);
+    uint16_t *pixelBuffer = (uint16_t *)p;
+    
     define_region_spi(x1, y1, x2, y2, 1);
-    while (i--) {
-        c.rgbbytes[0] = *p++; //this order swaps the bytes to match the .BMP file
-        c.rgbbytes[1] = *p++;
-        c.rgbbytes[2] = *p++;
-        // convert the colours to 565 format
-        // convert the colours to 565 format
+    
+    for (i = 0; i < pixelCount; i++) {
+        uint16_t pixel = pixelBuffer[i];
+        
+        // Extract RGB565 components
+        uint8_t r5 = (pixel >> 11) & 0x1F;
+        uint8_t g6 = (pixel >> 5) & 0x3F;
+        uint8_t b5 = pixel & 0x1F;
+        
+        // Convert to 8-bit values (scaling approximation)
+        uint8_t r8 = (r5 << 3) | (r5 >> 2);
+        uint8_t g8 = (g6 << 2) | (g6 >> 4);
+        uint8_t b8 = (b5 << 3) | (b5 >> 2);
+        
 #ifdef ILI9488
-        q[0] = c.rgbbytes[2];
-        q[1] = c.rgbbytes[1];
-        q[2] = c.rgbbytes[0];
+        // Convert each RGB565 pixel to RGB888 (3 bytes per pixel) for ILI9488
+        uint8_t rgb[3];
+        rgb[0] = r8;  // Red
+        rgb[1] = g8;  // Green
+        rgb[2] = b8;  // Blue
+        hw_send_spi(rgb, 3);
+#else
+        // For other controllers or if using 16-bit mode, retain the original conversion
+        hw_send_spi(q, 2);
 #endif
-        hw_send_spi(q, 3);
     }
+    
     lcd_spi_raise_cs();
-
 }
 
 //Print the bitmap of a char on the video output
@@ -217,7 +242,6 @@ void draw_bitmap_spi(int x1, int y1, int width, int height, int scale, int fc, i
     b[2] = (bc & 0xFF);
 
 #endif
-    //printf("draw_bitmap_spi-> XStart %d, y1 %d, XEnd %d, YEnd %d\n",XStart,y1,XEnd,YEnd);
     define_region_spi(XStart, y1, XEnd, YEnd, 1);
 
     n = 0;
@@ -336,11 +360,9 @@ void lcd_print_char( int fc, int bc, char c, int orientation) {
     height = fp[1];
     width = fp[0];
     modx = mody = 0;
-    //printf("fp %d, c %d ,height %d width %d\n",fp,c, height,width);
 
     if (c >= fp[2] && c < fp[2] + fp[3]) {
         p = fp + 4 + (int) (((c - fp[2]) * height * width) / 8);
-        //printf("p = %d\n",p);
         np = p;
 
         draw_bitmap_spi(current_x + modx, current_y + mody, width, height, scale, fc, bc, np);
@@ -387,7 +409,6 @@ void display_put_c(char c) {
     switch (c) {
         case '\b':
             current_x -= gui_font_width;
-            //if (current_x < 0) current_x = 0;
             if (current_x < 0) {  //Go to end of previous line
                 current_y -= gui_font_height;                  //Go up one line
                 if (current_y < 0) current_y = 0;
@@ -414,9 +435,6 @@ void display_put_c(char c) {
     lcd_print_char(gui_fcolour, gui_bcolour, c, ORIENT_NORMAL);// print it
 }
 
-/***
- *
-****////
 char lcd_put_char(char c, int flush) {
     lcd_putc(0, c);
     if (isprint(c)) lcd_char_pos++;
@@ -435,9 +453,27 @@ void lcd_print_string(char *s) {
     fflush(stdout);
 }
 
-///////=----------------------------------------===//////
+void lcd_print_string_color(char *s, int fg, int bg) {
+    int old_fg = gui_fcolour;
+    int old_bg = gui_bcolour;
+
+    gui_fcolour = fg;
+    gui_bcolour = bg;
+
+    while (*s) {
+        if (s[1]) lcd_put_char(*s, 0);
+        else lcd_put_char(*s, 1);
+        s++;
+    }
+
+    gui_fcolour = old_fg;
+    gui_bcolour = old_bg;
+
+    fflush(stdout);
+}
+
 void lcd_clear() {
-    draw_rect_spi(0, 0, hres - 1, vres - 1, BLACK);
+    draw_rect_spi(0, 0, hres - 1, vres - 1, GRAY);
 }
 
 void lcd_putc(uint8_t devn, uint8_t c) {
@@ -516,7 +552,6 @@ void pin_set_bit(int pin, unsigned int offset) {
             return;
         default:
             break;
-            //printf("Unknown pin_set_bit command");
     }
 }
 
@@ -588,7 +623,7 @@ void pico_lcd_init() {
     spi_write_data(0x48); // MX, BGR
 
     spi_write_command(0x3A); // Pixel Interface Format
-    spi_write_data(0x66); // 18 bit colour for SPI
+    spi_write_data(0x66); // 18/24-bit colour for SPI (RGB666/RGB888)
 
     spi_write_command(0xB0); // Interface Mode Control
     spi_write_data(0x00);
@@ -630,6 +665,11 @@ void pico_lcd_init() {
 
 void lcd_spi_raise_cs(void) {
     gpio_put(Pico_LCD_CS, 1);
+}
+
+void lcd_set_cursor(int x, int y) {
+    current_x = x;
+    current_y = y;
 }
 
 void lcd_spi_lower_cs(void) {
@@ -687,7 +727,6 @@ void lcd_spi_init() {
 
     gpio_set_dir(Pico_LCD_SCK, GPIO_OUT);
     gpio_set_dir(Pico_LCD_TX, GPIO_OUT);
-    //gpio_set_dir(Pico_LCD_RX, GPIO_IN);
     gpio_set_dir(Pico_LCD_CS, GPIO_OUT);
     gpio_set_dir(Pico_LCD_DC, GPIO_OUT);
     gpio_set_dir(Pico_LCD_RST, GPIO_OUT);
@@ -709,7 +748,7 @@ void lcd_init() {
     pico_lcd_init();
 
     set_font();
-    gui_fcolour = GREEN;
-    gui_bcolour = BLACK;
+    gui_fcolour = WHITE;
+    gui_bcolour = GRAY;
 
 }

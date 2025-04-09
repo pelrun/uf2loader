@@ -1,8 +1,23 @@
+/**
+ * PicoCalc SD Firmware Loader
+ *
+ * Author: Hsuan Han Lai
+ * Email: hsuan.han.lai@gmail.com
+ * Website: https://hsuanhanlai.com
+ * Year: 2025
+ *
+ * key_event.c
+ * 
+ * Wrapper for post processing dispatch keyboard events
+ * 
+ */
+
 #include "i2ckbd.h"
 #include <stdio.h>
 #include <string.h>
 #include <pico/stdio.h>
 #include "key_event.h"
+#include "debug.h"
 
 void keypad_init(void)
 {
@@ -40,7 +55,7 @@ int keypad_get_key(void)
         // Special Keys
         case 0x81: case 0x82: case 0x83: case 0x84: case 0x85:
         case 0x86: case 0x87: case 0x88: case 0x89: case 0x90: // F1-F10 Keys
-            printf("WARN: Function keys not mapped\n");
+            DEBUG_PRINT("Warn: F-key unmapped\n");
             act_key = 0;
             break;
 
@@ -57,7 +72,7 @@ int keypad_get_key(void)
             act_key = 0;
             break;
         case 0x08: // Backspace
-            act_key = 0;
+            act_key = KEY_BACKSPACE;
             break;
 
         case 0xD0: // brk
@@ -94,7 +109,7 @@ int keypad_get_key(void)
             break;
 
         case 0xD1: // Insert
-            printf("WARN: Insert key not mapped\n");
+            DEBUG_PRINT("Warn: Insert unmapped\n");
             act_key = 0;
             break;
 
@@ -105,14 +120,14 @@ int keypad_get_key(void)
             act_key = r;
             break;
         case 0xA5: // CTL
-            printf("WARN: CTL key not mapped\n");
+            DEBUG_PRINT("Warn: CTL unmapped\n");
             act_key = 0;
             break;
         case 0x20: // SPACE
             act_key = r;
             break;
         case 0xA1: // ALT
-            printf("WARN: ALT key not mapped\n");
+            DEBUG_PRINT("Warn: ALT unmapped\n");
             act_key = 0;
             break;
         case 0xA2: case 0xA3: // RIGHT/LEFT SHIFT

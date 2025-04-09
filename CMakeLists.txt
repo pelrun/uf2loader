@@ -26,6 +26,7 @@ add_subdirectory(pico-vfs)
 add_executable(picocalc_sd_boot
   main.c
   key_event.c
+  text_directory_ui.c
 )
 
 target_link_libraries(picocalc_sd_boot
