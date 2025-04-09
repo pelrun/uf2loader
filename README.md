@@ -114,4 +114,4 @@ Special Thanks to Hiroyuki OYAMA for the firmware loader mechanism and VFS file 
 
 ## License
 
-This project is licensed under the 3-Clause BSD License. For details, see the [LICENSE](LICENSE.md) file.
+This project is licensed under the 3-Clause BSD License. For details, see the [LICENSE](LICENSE) file.
