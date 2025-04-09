@@ -1,61 +1,117 @@
-# PicoCalc Hello World
+# Picocalc_SD_Boot 
 
-Demonstrate how to use spi screen, i2c keyboard and psram on PicoCalc.
+`Picocalc_SD_Boot` is a custom bootloader for the Raspberry Pi Pico. This bootloader provides the functionality to load and execute applications from an SD card, designed to enable PicoCalc to load firmware to the Pico using an SD card easily.
 
-## Building
+<div align="center">
+    <img src="img/sd_boot.jpg" alt="sdboot" width="80%">
+</div>
+
+
+
+## Prebuilt .uf2 Firmware Available
+[![Download Prebuilt Firmware](https://img.shields.io/badge/Download-Firmware-blue)](https://github.com/adwuard/Picocalc_SD_Boot/blob/main/prebuild_output/pico/picocalc_sd_boot_pico.uf2)
+
+Click the button above to download the prebuilt `.uf2` firmware for the `Picocalc_SD_Boot ` bootloader. Flash your pico with holding BOOT_SEL and drag and drop the `.uf2` file.
+
+
+## Bootloader Build From Scratch
+Clone the source code and initialize the submodules.
+
+```bash
+git clone https://github.com/adwuard/Picocalc_SD_Boot.git
+cd Picocalc_SD_Boot
+git submodule update --init --recursive
 ```
-mkdir build
-cd build
-export PICO_SDK_PATH=/where/pico-sdk/is
+
+Build the bootloader.
+
+```bash
+mkdir build; cd build
 cmake ..
-make  
+make
 ```
 
-## How to Upload UF2 
+## SD Card Application Build and Deployment
+🚨 **Important Note:** 🚨  
+```
+Applications intended for SD card boot "MUST REBUILD" using a custom linker script to accommodate the program's offset address. 
+```
+✅ You can find all the recompiled firmware available in the [sd_card_content](https://github.com/adwuard/Picocalc_SD_Boot/tree/main/sd_card_content) folder.
 
-Uploading a UF2 file to the Raspberry Pi Pico on a Linux system is straightforward. Here’s how you can do it:
+--- 
+This section explains how to build and deploy applications on an SD card. Below is a simple example of a CMakeLists.txt for an application.
 
-### Step 1: Prepare Your Raspberry Pi Pico
-Enter Bootloader Mode:
 
-- Hold down the BOOTSEL button on your Pico.
-- While holding the button, connect the Pico to your Linux PC via USB.
-- Release the BOOTSEL button.
-- Check If the Pico Is Recognized:
+## Step 1 Copy Custom Link Script
+Copy `memmap_sdcard_app.ld` to your project repository.
 
-Your Pico should appear as a mass storage device named RPI-RP2.
+## Step 2 Add Custom Link Script to CMakeList.txt
+```CMakeLists.txt
+cmake_minimum_required(VERSION 3.13...3.27)
+include(vendor/pico_sdk_import.cmake)
+add_subdirectory(pico-sdcard-boot)
 
-Verify using the following command:
+project(hello)
+set(FAMILY rp2040)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
+pico_sdk_init()
+
+add_executable(hello main.c)
+target_link_libraries(hello PRIVATE pico_stdlib)
+pico_enable_stdio_usb(hello 1)
+pico_add_extra_outputs(hello)
+
+
+# ----------- COPY THIS Section -----------
+function(enable_sdcard_app target)
+  pico_set_linker_script(${target} ${CMAKE_SOURCE_DIR}/memmap_sdcard_app.ld)
+endfunction()
+
+enable_sdcard_app(hello)
+# ----------- COPY THIS Section END -----------
+```
+The `enable_sdcard_app()` function sets the necessary `memmap_sdcard_app.ld` linker script for projects that boot from an SD card.
+
+### Build and Deployment Process
+1. Build the project using the above CMakeLists.txt.
 
 ```bash
-lsblk
+mkdir build; cd build
+PICO_SDK_PATH=/path/to/pico-sdk cmake ..
+make
 ```
 
-You should see a new device (e.g., /media/$USER/RPI-RP2 or /run/media/$USER/RPI-RP2).
-
-### Step 2: Copy the UF2 File to the Pico
-```
-cp your_firmware.uf2 /media/$USER/RPI-RP2/
-```
-
-### Step 3: Run it
-On PicoCalc, the default serial port of the Pico is the USB Type-C port, not its built-in Micro USB port.  
-So here is the standard running procedures: 
-
-- Unplug the pico from Micro-USB cable
-- Plug the pico via USB Type-C
-- Press Power On on Top of the PicoCalc
-
-
-If your firmware includes serial output, you can monitor it using **minicom** or **screen**:   
-```bash
-screen /dev/ttyACM0 115200
-```
-
-(Replace /dev/ttyACM0 with the correct serial port for your Pico.)  
-
-The serial monitor of **Arduino IDE** is another great choice for PicoCalc serial output on both Linux and Windows.
+## Step 3 Your Custom Application Is Ready For SD Card Boot 
+Once the build is complete, copy the generated `APP_FW.bin` file to the `/sd` directory of the SD card.
 
 
 
+## Technical Implementation Notes
+### Flash Update Mechanism
+The bootloader implements a safe update mechanism with the following features:
 
+- The bootloader itself resides in a protected flash area (first 256KB) that is never overwritten during updates
+- Only the application region of flash (starting at 256KB) is updated using `flash_range_erase` and `flash_range_program`
+- The bootloader verifies if the update differs from the current flash image before performing any write operations
+- Flash programming operations are executed from RAM using the `__not_in_flash_func` attribute to ensure safe execution while the flash is being modified
+- Program size is verified to prevent overwriting critical memory regions
+
+
+### Flash Programming Safety
+When updating flash memory, the code that performs the flash operations must not be executed from the flash itself. The bootloader ensures this by:
+
+1. Using the Raspberry Pi Pico SDK's `__not_in_flash_func` attribute for all flash programming functions
+2. This attribute ensures the functions are executed from RAM rather than flash
+3. Without this protection, attempting to modify the flash while executing code from it could lead to unpredictable behavior or bricking the device
+
+
+
+## Credits
+Special Thanks to Hiroyuki OYAMA for the firmware loader mechanism and VFS file system.
+- https://github.com/oyama/pico-sdcard-boot
+- https://github.com/oyama/pico-vfs
+
+## License
+
+This project is licensed under the 3-Clause BSD License. For details, see the [LICENSE](LICENSE.md) file.
