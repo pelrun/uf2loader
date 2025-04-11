@@ -32,6 +32,10 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
+// External functions for SD card handling
+extern bool sd_card_inserted(void);
+extern bool fs_init(void);
+
 // UI Layout Constants
 #define UI_WIDTH 280
 #define UI_HEIGHT 280
@@ -293,6 +297,30 @@ void text_directory_ui_run(void)
         {
             status_message[0] = '\0';
             ui_draw_status_bar();
+        }
+
+        // Check for SD card removal during runtime
+        if (!sd_card_inserted()) {
+            text_directory_ui_set_status("SD card removed. Please reinsert card.");
+            
+            // Wait until the SD card is reinserted
+            while (!sd_card_inserted()) {
+                sleep_ms(100);
+            }
+            
+            // Once reinserted, update the UI and reinitialize filesystem
+            text_directory_ui_set_status("SD card detected. Remounting...");
+            if (!fs_init()) {
+                text_directory_ui_set_status("Failed to remount SD card!");
+                sleep_ms(2000);
+                watchdog_reboot(0, 0, 0);
+            }
+            
+            // Refresh the directory listing
+            load_directory(current_path);
+            ui_draw_path_header();
+            ui_draw_directory_list();
+            text_directory_ui_set_status("SD card remounted successfully.");
         }
 
         sleep_ms(100);
