@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <hardware/watchdog.h>
 #include "pico/stdlib.h"
 #include "lcdspi/lcdspi.h"
 #include "key_event.h"

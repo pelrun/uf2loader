@@ -297,6 +297,13 @@ int main()
         text_directory_ui_set_status("SD card detected. Mounting...");
         sleep_ms(1500); // Wait for card to stabilize
     }
+    else
+    {
+        // If SD card is detected at boot, wait for stabilization
+        DEBUG_PRINT("SD card stabilization delay on boot\n");
+        text_directory_ui_set_status("Stabilizing SD card...");
+        sleep_ms(1500); // Delay to allow the SD card to fully power up and stabilize
+    }
     
     // Initialize filesystem
     if (!fs_init())
