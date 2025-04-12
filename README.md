@@ -107,7 +107,3 @@ When updating flash memory, the code that performs the flash operations must not
 Special Thanks to Hiroyuki OYAMA for the firmware loader mechanism and VFS file system.
 - https://github.com/oyama/pico-sdcard-boot
 - https://github.com/oyama/pico-vfs
-
-## License
-
-This project is licensed under the 3-Clause BSD License. For details, see the [LICENSE](LICENSE) file.
