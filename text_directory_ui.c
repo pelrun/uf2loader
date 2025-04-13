@@ -59,7 +59,17 @@ typedef struct
 {
     char name[256];
     int is_dir; // 1 if directory, 0 if file
+    off_t file_size; // Size of the file in bytes
 } dir_entry_t;
+
+// UI Layout Constants for file display
+#define FILE_NAME_X (UI_X + 4)
+#define FILE_NAME_AREA_WIDTH 200
+#define FILE_SIZE_X (UI_X + UI_WIDTH - 70)
+#define FILE_SIZE_AREA_WIDTH 60
+#define CHAR_WIDTH 8
+#define FILE_NAME_VISIBLE_CHARS (FILE_NAME_AREA_WIDTH / CHAR_WIDTH)
+#define SCROLL_DELAY_MS 300
 
 // Global variables for UI state
 static char current_path[512] = "/sd";                   // Current directory path
@@ -77,7 +87,11 @@ static void process_key_event(int key);
 static void ui_draw_title(void);
 static void ui_draw_path_header(void);
 static void ui_draw_directory_list(void);
+static void ui_draw_directory_entry(int entry_idx, int posY, int font_height, int is_selected);
+static void ui_update_selected_entry(void);
 static void ui_draw_status_bar(void);
+static void format_file_size(off_t size, int is_dir, char *buf, size_t buf_size);
+static void get_scrolling_text(const char *text, char *out, size_t out_size, int visible_chars);
 
 // Helper: Draw a filled rectangle
 static void draw_filled_rect(int x, int y, int width, int height, int color)
@@ -90,6 +104,51 @@ static void draw_text(int x, int y, const char *text, int foreground, int backgr
 {
     lcd_set_cursor(x, y);
     lcd_print_string_color((char *)text, foreground, background);
+}
+
+/**
+ * Format file size into human-readable string
+ * Converts raw byte count to KB or MB with appropriate suffix
+ */
+static void format_file_size(off_t size, int is_dir, char *buf, size_t buf_size)
+{
+    if (is_dir)
+    {
+        snprintf(buf, buf_size, "DIR");
+    }
+    else if (size >= 1024 * 1024)
+    {
+        double mb = size / (1024.0 * 1024.0);
+        snprintf(buf, buf_size, "%.1fMB", mb);
+    }
+    else
+    {
+        int kb = size / 1024;
+        if (kb < 1)
+            kb = 1;
+        snprintf(buf, buf_size, "%dKB", kb);
+    }
+}
+
+/**
+ * Create scrolling text for long filenames
+ * Creates a continuous scroll effect for text that exceeds visible area
+ */
+static void get_scrolling_text(const char *text, char *out, size_t out_size, int visible_chars)
+{
+    char scroll_buffer[512];
+    snprintf(scroll_buffer, sizeof(scroll_buffer), "%s   %s", text, text);
+    int scroll_len = strlen(scroll_buffer);
+    uint32_t time_ms = time_us_64() / 1000;
+    int offset = (time_ms / SCROLL_DELAY_MS) % scroll_len;
+    
+    int i;
+    for (i = 0; i < visible_chars && i < out_size - 1; i++)
+    {
+        int idx = (offset + i) % scroll_len;
+        out[i] = scroll_buffer[idx];
+    }
+    out[i] = '\0';
 }
 
 // Load directory entries into the global entries array
@@ -110,23 +169,38 @@ static void load_directory(const char *path)
         strncpy(entries[entry_count].name, ent->d_name, sizeof(entries[entry_count].name) - 1);
         entries[entry_count].name[sizeof(entries[entry_count].name) - 1] = '\0';
 
-        // Determine if the entry is a directory
+        // Build full path for stat
+        char full_path[512];
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, ent->d_name);
+        
+        // Determine if the entry is a directory and get file size
         if (ent->d_type != DT_UNKNOWN)
         {
             entries[entry_count].is_dir = (ent->d_type == DT_DIR) ? 1 : 0;
+            
+            // Get file size using stat even if we know the type from d_type
+            struct stat statbuf;
+            if (stat(full_path, &statbuf) == 0)
+            {
+                entries[entry_count].file_size = entries[entry_count].is_dir ? 0 : statbuf.st_size;
+            }
+            else
+            {
+                entries[entry_count].file_size = 0;
+            }
         }
         else
         {
             struct stat statbuf;
-            char full_path[512];
-            snprintf(full_path, sizeof(full_path), "%s/%s", path, ent->d_name);
             if (stat(full_path, &statbuf) == 0)
             {
                 entries[entry_count].is_dir = S_ISDIR(statbuf.st_mode) ? 1 : 0;
+                entries[entry_count].file_size = entries[entry_count].is_dir ? 0 : statbuf.st_size;
             }
             else
             {
                 entries[entry_count].is_dir = 0;
+                entries[entry_count].file_size = 0;
             }
         }
         entry_count++;
@@ -153,6 +227,89 @@ static void ui_draw_path_header(void)
     draw_line_spi(UI_X, y + PATH_HEADER_HEIGHT - 2, UI_X + UI_WIDTH - 1, y + PATH_HEADER_HEIGHT - 2, COLOR_FG);
 }
 
+/**
+ * Draw a single directory entry
+ * 
+ * @param entry_idx Index of the entry in the entries array
+ * @param posY Vertical position to draw the entry
+ * @param font_height Height of the font
+ * @param is_selected Whether this entry is currently selected
+ */
+static void ui_draw_directory_entry(int entry_idx, int posY, int font_height, int is_selected)
+{
+    // Highlight background for selected item
+    if (is_selected)
+    {
+        draw_rect_spi(UI_X, posY - 1, UI_X + UI_WIDTH - 1, posY + font_height, COLOR_HIGHLIGHT);
+    }
+    
+    // Prepare filename with directory indicator
+    char full_file_name[300];
+    snprintf(full_file_name, sizeof(full_file_name), "%s%s", 
+            entries[entry_idx].name, 
+            entries[entry_idx].is_dir ? "/" : "");
+    
+    // Prepare display text with scrolling for selected items
+    char display_buffer[300];
+    if (is_selected && strlen(full_file_name) > FILE_NAME_VISIBLE_CHARS)
+    {
+        // Use scrolling text for selected long filenames
+        get_scrolling_text(full_file_name, display_buffer, sizeof(display_buffer), FILE_NAME_VISIBLE_CHARS);
+    }
+    else
+    {
+        // For non-selected or short filenames
+        if (strlen(full_file_name) > FILE_NAME_VISIBLE_CHARS)
+        {
+            // Truncate with ellipsis
+            strncpy(display_buffer, full_file_name, FILE_NAME_VISIBLE_CHARS - 3);
+            display_buffer[FILE_NAME_VISIBLE_CHARS - 3] = '\0';
+            strcat(display_buffer, "...");
+        }
+        else
+        {
+            strncpy(display_buffer, full_file_name, sizeof(display_buffer) - 1);
+            display_buffer[sizeof(display_buffer) - 1] = '\0';
+        }
+    }
+    
+    // Format and display file size
+    char size_buffer[20];
+    format_file_size(entries[entry_idx].file_size, entries[entry_idx].is_dir, 
+                    size_buffer, sizeof(size_buffer));
+    
+    // Draw filename and file size
+    draw_text(FILE_NAME_X, posY, display_buffer, COLOR_FG, is_selected ? COLOR_HIGHLIGHT : COLOR_BG);
+    draw_text(FILE_SIZE_X, posY, size_buffer, COLOR_FG, is_selected ? COLOR_HIGHLIGHT : COLOR_BG);
+}
+
+/**
+ * Update only the selected entry row
+ * This is an optimization to avoid redrawing the entire directory list
+ * when only the selected entry needs to be updated (e.g., for scrolling text)
+ */
+static void ui_update_selected_entry(void)
+{
+    const int font_height = 12;
+    const int entry_padding = 2;
+    int y_start = UI_Y + HEADER_TITLE_HEIGHT + PATH_HEADER_HEIGHT;
+    int available_height = UI_HEIGHT - (HEADER_TITLE_HEIGHT + PATH_HEADER_HEIGHT + STATUS_BAR_HEIGHT);
+    int max_visible = available_height / (font_height + entry_padding);
+    int start_index = (selected_index >= max_visible) ? selected_index - max_visible + 1 : 0;
+    
+    // Calculate the position of the selected entry
+    int visible_index = selected_index - start_index;
+    if (visible_index >= 0 && visible_index < max_visible) {
+        int posY = y_start + visible_index * (font_height + entry_padding);
+        
+        // Clear just the selected row
+        draw_rect_spi(UI_X, posY - 1, UI_X + UI_WIDTH - 1, posY + font_height, COLOR_BG);
+        
+        // Redraw just the selected entry
+        ui_draw_directory_entry(selected_index, posY, font_height, 1);
+    }
+}
+
 // Draw the directory list
 static void ui_draw_directory_list(void)
 {
@@ -167,15 +324,12 @@ static void ui_draw_directory_list(void)
 
     for (int i = 0; i < max_visible && (i + start_index) < entry_count; i++)
     {
-        int posX = UI_X + 4;
         int posY = y_start + i * (font_height + entry_padding);
-        if (i + start_index == selected_index)
-        {
-            draw_rect_spi(posX - 4, posY - 1, posX + UI_WIDTH - 8, posY + font_height, COLOR_HIGHLIGHT);
-        }
-        char text_buffer[300];
-        snprintf(text_buffer, sizeof(text_buffer), "%s%s", entries[i + start_index].name, entries[i + start_index].is_dir ? "/" : "");
-        draw_text(posX, posY, text_buffer, COLOR_FG, COLOR_BG);
+        int entry_idx = i + start_index;
+        int is_selected = (entry_idx == selected_index);
+        
+        // Draw the entry using the helper function
+        ui_draw_directory_entry(entry_idx, posY, font_height, is_selected);
     }
 }
 
@@ -288,13 +442,31 @@ void text_directory_ui_set_status(const char *msg)
 // Public API: Main event loop for the UI
 void text_directory_ui_run(void)
 {
+    uint32_t last_scroll_update = 0;
+    const uint32_t SCROLL_UPDATE_MS = 100; // Update scrolling text every 100ms
+    
     while (true)
     {
         int key = keypad_get_key();
         if (key != 0)
             process_key_event(key);
 
-        if (status_message[0] != '\0' && ((time_us_64() / 1000) - status_timestamp) > 3000)
+        uint32_t current_time = time_us_64() / 1000;
+        
+        // Update scrolling text periodically
+        if (current_time - last_scroll_update > SCROLL_UPDATE_MS)
+        {
+            // Only update the selected entry row if there are entries and a selected item might need scrolling
+            if (entry_count > 0 && selected_index >= 0 && 
+                strlen(entries[selected_index].name) + (entries[selected_index].is_dir ? 1 : 0) > FILE_NAME_VISIBLE_CHARS)
+            {
+                ui_update_selected_entry();
+            }
+            last_scroll_update = current_time;
+        }
+
+        // Clear status message after timeout
+        if (status_message[0] != '\0' && (current_time - status_timestamp) > 3000)
         {
             status_message[0] = '\0';
             ui_draw_status_bar();
@@ -324,6 +496,6 @@ void text_directory_ui_run(void)
             text_directory_ui_set_status("SD card remounted successfully.");
         }
 
-        sleep_ms(100);
+        sleep_ms(20); // Shorter sleep to make scrolling smoother
     }
 }
