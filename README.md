@@ -8,7 +8,7 @@
 
 
 ## Prebuilt .uf2 Firmware Available
-[![Download Prebuilt Firmware](https://img.shields.io/badge/Download-Firmware-blue)](https://github.com/adwuard/Picocalc_SD_Boot/blob/main/prebuild_output/pico/picocalc_sd_boot_pico.uf2)
+[![Download Prebuilt Firmware](https://img.shields.io/badge/Download-Firmware-blue)](https://github.com/adwuard/Picocalc_SD_Boot/tree/main/prebuild_output)
 
 Click the button above to download the prebuilt `.uf2` firmware for the `Picocalc_SD_Boot ` bootloader. Flash your pico with holding BOOT_SEL and drag and drop the `.uf2` file.
 
