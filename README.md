@@ -7,7 +7,6 @@
 </div>
 
 
-
 ## Prebuilt .uf2 Firmware Available
 [![Download Prebuilt Firmware](https://img.shields.io/badge/Download-Firmware-blue)](https://github.com/adwuard/Picocalc_SD_Boot/blob/main/prebuild_output/pico/picocalc_sd_boot_pico.uf2)
 
@@ -108,9 +107,12 @@ When updating flash memory, the code that performs the flash operations must not
 2. This attribute ensures the functions are executed from RAM rather than flash
 3. Without this protection, attempting to modify the flash while executing code from it could lead to unpredictable behavior or bricking the device
 
-
-
 ## Credits
-Special Thanks to Hiroyuki OYAMA for the firmware loader mechanism and VFS file system.
-- https://github.com/oyama/pico-sdcard-boot
-- https://github.com/oyama/pico-vfs
+- [Hiroyuki Oyama](https://github.com/oyama/pico-sdcard-boot): Special thanks for the firmware loader mechanism and VFS file system.
+  - https://github.com/oyama/pico-sdcard-boot
+  - https://github.com/oyama/pico-vfs
+- [TheKiwil](https://github.com/TheKiwil/): Special thanks for contributions on supporting pico2 boards with new custom linker script.
+
+## Read More
+- Blog on this repository, and more technical detail about bootloader. -->[Blog Page](https://hsuanhanlai.com/writting-custom-bootloader-for-RPI-Pico/)
+- Fourm Page and Discussion: [Clockwork Pi Fourm](https://forum.clockworkpi.com/t/i-made-an-app-that-dynamically-load-firmware-from-sd-card/16664/24)
