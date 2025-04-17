@@ -64,7 +64,14 @@ pico_add_extra_outputs(hello)
 
 
 # ----------- COPY THIS Section -----------
-  pico_set_linker_script(hello ${CMAKE_SOURCE_DIR}/memmap_sdcard_app.ld)
+function(enable_sdcard_app target)
+  #pico_set_linker_script(${target} ${CMAKE_SOURCE_DIR}/memmap_sdcard_app.ld)
+  if(${PICO_PLATFORM} STREQUAL "rp2040")
+    pico_set_linker_script(${CMAKE_PROJECT_NAME} ${CMAKE_SOURCE_DIR}/memmap_default_rp2040.ld)
+  elseif(${PICO_PLATFORM} MATCHES "rp2350")
+    pico_set_linker_script(${CMAKE_PROJECT_NAME} ${CMAKE_SOURCE_DIR}/memmap_default_rp2350.ld)
+  endif()
+endfunction()
 # ----------- COPY THIS Section END -----------
 ```
 The `enable_sdcard_app()` function sets the necessary `memmap_sdcard_app.ld` linker script for projects that boot from an SD card.

@@ -33,6 +33,15 @@
 
 const uint LEDPIN = 25;
 
+// Vector and RAM offset
+#if PICO_RP2040
+#define VTOR_OFFSET M0PLUS_VTOR_OFFSET
+#define MAX_RAM 0x20040000
+#elif PICO_RP2350
+#define VTOR_OFFSET M33_VTOR_OFFSET
+#define MAX_RAM 0x20080000
+#endif
+
 bool sd_card_inserted(void)
 {
     // Active low detection - returns true when pin is low
@@ -163,7 +172,7 @@ void __not_in_flash_func(launch_application_from)(uint32_t *app_location)
 {
     // https://vanhunteradams.com/Pico/Bootloader/Bootloader.html
     uint32_t *new_vector_table = app_location;
-    volatile uint32_t *vtor = (uint32_t *)(PPB_BASE + M0PLUS_VTOR_OFFSET);
+    volatile uint32_t *vtor = (uint32_t *)(PPB_BASE + VTOR_OFFSET);
     *vtor = (uint32_t)new_vector_table;
     asm volatile(
         "msr msp, %0\n"
@@ -178,7 +187,7 @@ static bool is_valid_application(uint32_t *app_location)
 {
     // Check that the initial stack pointer is within a plausible RAM region (assumed range for Pico: 0x20000000 to 0x20040000)
     uint32_t stack_pointer = app_location[0];
-    if (stack_pointer < 0x20000000 || stack_pointer > 0x20040000)
+    if (stack_pointer < 0x20000000 || stack_pointer > MAX_RAM)
     {
         return false;
     }

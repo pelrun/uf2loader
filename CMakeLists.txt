@@ -1,28 +1,33 @@
 cmake_minimum_required(VERSION 3.13...3.27)
 
-include(pico_sdk_import.cmake)
-
 project(picocalc_sd_boot C CXX ASM)
 set(CMAKE_INSTALL_PREFIX ${CMAKE_SOURCE_DIR} CACHE PATH "Install prefix set to project root" FORCE)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
-pico_sdk_init()
-
 include_directories(
   ${CMAKE_CURRENT_LIST_DIR}
 )
 
-add_subdirectory(i2ckbd)
-add_subdirectory(lcdspi)
-add_subdirectory(pico-vfs)
-
-
 function(build_for_board board_name)
-  set(PICO_BOARD ${board_name})
 
-  
+  if(board_name STREQUAL "pico2_w")
+    set(PICO_PLATFORM rp2350)
+    set(PICO_BOARD pico2_w)
+  else()
+    set(PICO_PLATFORM rp2040)
+    set(PICO_BOARD pico)
+  endif()
+
+  include(pico_sdk_import.cmake)
+
+  add_subdirectory(i2ckbd)
+  add_subdirectory(lcdspi)
+  add_subdirectory(pico-vfs)
+
+  pico_sdk_init()
+
   add_executable(picocalc_sd_boot_${board_name}
     main.c
     key_event.c
@@ -72,13 +77,10 @@ endfunction()
 
 
 # Build for Pico
-build_for_board(pico)
+#build_for_board(pico)
 
-# Build for Pico (Not supported yet)
-# build_for_board(pico2)
-
-
-
+# Build for Pico
+build_for_board(pico2_w)
 
 # This function sets the custom linker script for SD card applications
 # The memmap_sdcard_app.ld script configures the application to start at
@@ -86,6 +88,10 @@ build_for_board(pico)
 # defined in main.c (256 * 1024). This ensures the bootloader (first 256KB)
 # is preserved when flashing the application.
 function(enable_sdcard_app target)
-  pico_set_linker_script(${target} ${CMAKE_SOURCE_DIR}/memmap_sdcard_app.ld)
+  #pico_set_linker_script(${target} ${CMAKE_SOURCE_DIR}/memmap_sdcard_app.ld)
+  if(${PICO_PLATFORM} STREQUAL "rp2040")
+    pico_set_linker_script(${CMAKE_PROJECT_NAME} ${CMAKE_SOURCE_DIR}/memmap_default_rp2040.ld)
+  elseif(${PICO_PLATFORM} MATCHES "rp2350")
+    pico_set_linker_script(${CMAKE_PROJECT_NAME} ${CMAKE_SOURCE_DIR}/memmap_default_rp2350.ld)
+  endif()
 endfunction()
-
