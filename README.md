@@ -6,7 +6,7 @@
     <img src="img/sd_boot.jpg" alt="sdboot" width="80%">
 </div>
 
-## 🚧 Improvements Plans
+## 🚧 Improvement Plans
 work in progress plans [Feature Request Post](https://forum.clockworkpi.com/t/i-made-an-app-that-dynamically-load-firmware-from-sd-card/16664/25?u=adwuard)
 - [ ] Avoiding the need to recompile Apps, A/B image see [Address Translation (see page 364 of the RP2350 datasheet, section 5.1.19)](https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf)
 - [ ] Support for .uf2 files, extract `.bin` from `.uf2` firmware  [pico-bootrom](https://github.com/raspberrypi/pico-bootrom-rp2350)
