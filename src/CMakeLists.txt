@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.13...3.27)
 
+include(pico_sdk_import.cmake)
+
 project(picocalc_sd_boot C CXX ASM)
 set(CMAKE_INSTALL_PREFIX ${CMAKE_SOURCE_DIR} CACHE PATH "Install prefix set to project root" FORCE)
 
@@ -13,18 +15,15 @@ include_directories(
 function(build_for_board board_name)
 
   if(board_name STREQUAL "pico2_w")
-    set(PICO_PLATFORM rp2350)
     set(PICO_BOARD pico2_w)
   else()
-    set(PICO_PLATFORM rp2040)
     set(PICO_BOARD pico)
   endif()
 
-  include(pico_sdk_import.cmake)
 
   add_subdirectory(i2ckbd)
   add_subdirectory(lcdspi)
-  add_subdirectory(pico-vfs)
+  add_subdirectory(lib/pico-vfs)
 
   pico_sdk_init()
 

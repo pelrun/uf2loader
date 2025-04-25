@@ -32,6 +32,7 @@ git submodule update --init --recursive
 Build the bootloader.
 
 ```bash
+cd ./src
 mkdir build; cd build
 cmake ..
 make
