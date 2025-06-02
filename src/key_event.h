@@ -17,5 +17,5 @@ typedef enum {
 
 void keypad_init(void);
 int keypad_get_key(void);
-
+int keypad_get_battery(void);
 #endif // KEY_EVENT_H

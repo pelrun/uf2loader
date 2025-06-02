@@ -1,6 +1,39 @@
+/* Based on GCC ARM embedded samples.
+   Defines the following symbols for use by code:
+    __exidx_start
+    __exidx_end
+    __etext
+    __data_start__
+    __preinit_array_start
+    __preinit_array_end
+    __init_array_start
+    __init_array_end
+    __fini_array_start
+    __fini_array_end
+    __data_end__
+    __bss_start__
+    __bss_end__
+    __end__
+    end
+    __HeapLimit
+    __StackLimit
+    __StackTop
+    __stack (== StackTop)
+*/
+
+_flash_origin = 0x10000000;
+_flash_size = 2m;
+
+_bootloader_app_size = 140k;
+
 MEMORY
 {
-    FLASH(rx) : ORIGIN = 0x10000000 + 256k, LENGTH = 2048k - 256k
+    /* boot_stage2 resides at the beginning, while sd_boot executable
+        takes up 64 kB at the end of the flash
+    */
+    BOOT2(rx) : ORIGIN = _flash_origin, LENGTH = 256
+    FLASH(rx) : ORIGIN = (_flash_origin + _flash_size) - _bootloader_app_size, LENGTH = _bootloader_app_size - 4
+    FLASH1(rx) : ORIGIN = (_flash_origin + _flash_size) - 4, LENGTH = 4
     RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 256k
     SCRATCH_X(rwx) : ORIGIN = 0x20040000, LENGTH = 4k
     SCRATCH_Y(rwx) : ORIGIN = 0x20041000, LENGTH = 4k
@@ -17,16 +50,19 @@ SECTIONS
 
     .flash_begin : {
         __flash_binary_start = .;
-    } > FLASH
+    } > BOOT2
 
-    /* The second stage will always enter the image at the start of .text.
-       The debugger will use the ELF entry point, which is the _entry_point
-       symbol if present, otherwise defaults to start of .text.
-       This can be used to transfer control back to the bootrom on debugger
-       launches only, to perform proper flash setup.
-    */
+    .boot2 : {
+        __boot2_start__ = .;
+        KEEP (*(.boot2))
+        __boot2_end__ = .;
+    } > BOOT2
+
+    ASSERT(__boot2_end__ - __boot2_start__ == 256,
+        "ERROR: Pico second stage bootloader must be 256 bytes in size")
 
     .text : {
+        __vector_start = .;
         __logical_binary_start = .;
         KEEP (*(.vectors))
         KEEP (*(.binary_info_header))
@@ -138,6 +174,24 @@ SECTIONS
         /* All data end */
         __data_end__ = .;
     } > RAM AT> FLASH
+
+    .sdboot.prog_info : {
+        /* Align to 4 KB sector boundary. And consume exactly one sector  */
+        . = ALIGN(4096);
+        KEEP(*(.sdboot.prog_info*))
+        . = ALIGN(4096);
+    } > FLASH
+
+    .flash_end : {
+        PROVIDE(__flash_binary_end = .);
+    } > FLASH
+
+    /* save start address at the end of flash so boot2 can find it */
+    .bootloader_start :
+    {
+        LONG(__vector_start)
+    } > FLASH1
+
     /* __etext is (for backwards compatibility) the name of the .data init source pointer (...) */
     __etext = LOADADDR(.data);
 
@@ -197,10 +251,6 @@ SECTIONS
     {
         KEEP(*(.stack*))
     } > SCRATCH_Y
-
-    .flash_end : {
-        PROVIDE(__flash_binary_end = .);
-    } > FLASH
 
     /* stack limit is poorly named, but historically is maximum heap ptr */
     __StackLimit = ORIGIN(RAM) + LENGTH(RAM);

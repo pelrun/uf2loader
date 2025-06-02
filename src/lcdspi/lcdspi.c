@@ -344,6 +344,22 @@ void draw_rect_spi(int x1, int y1, int x2, int y2, int c) {
     lcd_spi_raise_cs();
 }
 
+//16x6
+void draw_battery_icon(int x0, int y0, int level) {
+    draw_rect_spi(x0, y0, x0+14, y0+6, WHITE);
+    draw_rect_spi(x0 + 1, y0 + 1, x0+12, y0+5, BLACK);
+
+    // (2x2)
+    draw_rect_spi(x0 + 14, y0 + 2, x0+14+2, y0+2+2, WHITE);
+
+    for (int i = 0; i <= 13; i++) {
+        if (i < level) {
+            draw_rect_spi(x0 + 1 + i * 1, y0 + 1, x0 + 1 + i*1+1, y0+1+4, WHITE);
+        }
+    }
+
+}
+
 /******************************************************************************************
  Print a char on the LCD display
  Any characters not in the font will print as a space.
@@ -473,7 +489,7 @@ void lcd_print_string_color(char *s, int fg, int bg) {
 }
 
 void lcd_clear() {
-    draw_rect_spi(0, 0, hres - 1, vres - 1, GRAY);
+    draw_rect_spi(0, 0, hres - 1, vres - 1, BLACK);
 }
 
 void lcd_putc(uint8_t devn, uint8_t c) {

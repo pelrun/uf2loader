@@ -123,7 +123,7 @@ void draw_rect_spi(int x1, int y1, int x2, int y2, int c);
 void define_region_spi(int xstart, int ystart, int xend, int yend, int rw);
 void draw_line_spi(int x1, int y1, int x2, int y2, int color);
 void lcd_print_string_color(char *s, int fg, int bg);
-
+void draw_battery_icon(int x0, int y0, int level);
 //Print the bitmap of a char on the video output
 //    x, y - the top left of the char
 //    width, height - size of the char's bitmap

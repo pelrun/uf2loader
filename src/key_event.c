@@ -141,3 +141,11 @@ int keypad_get_key(void)
     return act_key;
 }
 
+int keypad_get_battery() {
+    int bat_pcnt = read_battery();
+    bat_pcnt = bat_pcnt >> 8;
+    //int bat_charging = bitRead(bat_pcnt, 7);
+    bitClear(bat_pcnt, 7);
+    return bat_pcnt;
+
+}
