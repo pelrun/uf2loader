@@ -12,12 +12,6 @@ work in progress plans [Feature Request Post](https://forum.clockworkpi.com/t/i-
 - [ ] USB Mass Storage mode for SD card. [Related Demo Code](https://github.com/hathach/tinyusb/tree/master/examples/device/cdc_msc/src)
 
 
-## Prebuilt .uf2 Firmware Available
-[![Download Prebuilt Firmware](https://img.shields.io/badge/Download-Firmware-blue)](https://github.com/adwuard/Picocalc_SD_Boot/tree/main/prebuild_output)
-
-Click the button above to download the prebuilt `.uf2` firmware for the `Picocalc_SD_Boot ` bootloader. Flash your pico with holding BOOT_SEL and drag and drop the `.uf2` file.
-
-
 ## Bootloader Build From Scratch
 Clone the source code and initialize the submodules.
 
@@ -32,15 +26,6 @@ Build the bootloader.
 ```bash
 cd ./src
 mkdir build; cd build
-cmake ..
-make
-```
-
-### Build and Deployment Process
-1. Build the project using the above CMakeLists.txt.
-
-```bash
-mkdir build; cd build
 PICO_SDK_PATH=/path/to/pico-sdk cmake ..
 make
 ```
@@ -49,7 +34,7 @@ make
 ### Flash Update Mechanism
 The bootloader implements a safe update mechanism with the following features:
 
-- The bootloader itself resides in a flash area that is never overwritten during updates
+- The bootloader itself resides at the top of the flash area and is never overwritten during updates
 - Only the application region of flash (starting at 256b) is updated using `flash_range_erase` and `flash_range_program`
 
 ## Credits
