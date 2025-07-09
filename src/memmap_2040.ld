@@ -32,8 +32,8 @@ MEMORY
         takes up 64 kB at the end of the flash
     */
     BOOT2(rx) : ORIGIN = _flash_origin, LENGTH = 256
-    FLASH(rx) : ORIGIN = (_flash_origin + _flash_size) - _bootloader_app_size, LENGTH = _bootloader_app_size - 4
-    FLASH1(rx) : ORIGIN = (_flash_origin + _flash_size) - 4, LENGTH = 4
+    FLASH(rx) : ORIGIN = (_flash_origin + _flash_size) - _bootloader_app_size, LENGTH = _bootloader_app_size - 8
+    FLASH1(rx) : ORIGIN = (_flash_origin + _flash_size) - 8, LENGTH = 8
     RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 256k
     SCRATCH_X(rwx) : ORIGIN = 0x20040000, LENGTH = 4k
     SCRATCH_Y(rwx) : ORIGIN = 0x20041000, LENGTH = 4k
@@ -189,6 +189,7 @@ SECTIONS
     /* save start address at the end of flash so boot2 can find it */
     .bootloader_start :
     {
+        LONG(0xe98cc638);
         LONG(__vector_start)
     } > FLASH1
 

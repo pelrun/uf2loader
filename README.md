@@ -31,6 +31,11 @@ make
 ```
 
 ## Technical Implementation Notes
+### Bootloader detection/size management
+As the RP2040 does not have a mechanism for write protecting flash regions, the bootloader can be accidentally corrupted by the application if it writes to the same area. Devs can add the ability to detect the bootloader and it's size at runtime and therefore know exactly how much flash is available to be used.
+
+To do this, read the 8 bytes at the very end of the flash area. This consists of a 32-bit magic number (`0xe98cc638`) at XIP_BASE+0x1ffff8, and the start address of the bootloader at XIP_BASE+0x1ffffc. The application is free to write anywhere below this address.
+
 ### Flash Update Mechanism
 The bootloader implements a safe update mechanism with the following features:
 
