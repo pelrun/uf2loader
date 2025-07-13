@@ -102,12 +102,9 @@ void launch_application_from(uint32_t *app_location)
 
 int launch_application(void)
 {
-    // Get the pointer to the application flash area
-    uint32_t *app_location = (void*)get_prog_info()->prog_addr;
-
     if (check_prog_info())
     {
-        launch_application_from(app_location);
+        launch_application_from((void*)get_prog_info()->prog_addr);
     }
 }
 

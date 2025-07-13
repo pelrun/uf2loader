@@ -35,6 +35,8 @@
 
 #include "proginfo.h"
 
+#define VERSION "v1.2"
+
 // External functions for SD card handling
 extern bool sd_card_inserted(void);
 extern bool fs_init(void);
@@ -150,17 +152,15 @@ static void format_file_size(off_t size, int type, char *buf, size_t buf_size)
 }
 
 static void set_default_entry(){
-    volatile prog_info_t const *prog_info = get_prog_info();
-
     entry_count = 0;
 
-    if (strlen((const char *)prog_info->filename) == 0)
+    if (!check_prog_info())
     {
         strlcpy(entries[entry_count].name, "[No App]", sizeof(entries[entry_count].name));
     }
     else
     {
-        snprintf(entries[entry_count].name, sizeof(entries[entry_count].name), "[%s]", prog_info->filename);
+        snprintf(entries[entry_count].name, sizeof(entries[entry_count].name), "[%s]", get_prog_info()->filename);
     }
 
     entries[entry_count].type = ENTRY_IS_LAST_APP;
@@ -261,7 +261,7 @@ static void load_directory(const char *path)
 static void ui_draw_title(void)
 {
     draw_rect_spi(UI_X, UI_Y, UI_X + UI_WIDTH - 1, UI_Y + HEADER_TITLE_HEIGHT, BLACK);
-    draw_text(UI_X + 2, UI_Y + 2, "PicoCalc UF2 Loader v1.0", WHITE, BLACK);
+    draw_text(UI_X + 2, UI_Y + 2, "PicoCalc UF2 Loader " VERSION, WHITE, BLACK);
 }
 
 static void ui_draw_empty_tip(){
