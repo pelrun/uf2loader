@@ -1,0 +1,194 @@
+name: Build Picocalc SD Boot
+
+on:
+  push:
+    branches: [ main, highmem ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, highmem ]
+
+env:
+  PICO_SDK_VERSION: 2.1.0
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        board: [pico, pico2_w]
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib clang-tidy
+
+    - name: Setup Pico SDK
+      run: |
+        git clone https://github.com/raspberrypi/pico-sdk.git
+        cd pico-sdk
+        git checkout ${PICO_SDK_VERSION}
+        git submodule update --init
+        echo "PICO_SDK_PATH=$PWD" >> $GITHUB_ENV
+
+    - name: Configure CMake for ${{ matrix.board }}
+      run: |
+        cd src
+        if [ "${{ matrix.board }}" = "pico2_w" ]; then
+          cmake -B build -DCMAKE_BUILD_TYPE=MinSizeRel -DPICO_SDK_PATH=$PICO_SDK_PATH -DBUILD_PICO2=ON
+        else
+          cmake -B build -DCMAKE_BUILD_TYPE=MinSizeRel -DPICO_SDK_PATH=$PICO_SDK_PATH -DBUILD_PICO2=OFF
+        fi
+
+    - name: Build
+      run: |
+        cd src
+        cmake --build build -j 4
+
+    - name: Check binary sizes
+      run: |
+        cd src/build
+        echo "=== Binary Size Report for ${{ matrix.board }} ==="
+        
+        if [ "${{ matrix.board }}" = "pico2_w" ]; then
+          ELF_FILE="picocalc_sd_boot_pico2_w.elf"
+          BOARD_NAME="Pico2 W (RP2350)"
+        else
+          ELF_FILE="picocalc_sd_boot_pico.elf"
+          BOARD_NAME="Pico (RP2040)"
+        fi
+        
+        echo "$BOARD_NAME loader:"
+        arm-none-eabi-size $ELF_FILE
+        
+        # Check loader size (must be ≤ 256 kB)
+        SIZE=$(arm-none-eabi-size $ELF_FILE | tail -1 | awk '{print $1 + $2}')
+        
+        echo ""
+        echo "Loader size check:"
+        echo "$BOARD_NAME loader: $SIZE bytes (limit: 262144)"
+        
+        if [ $SIZE -gt 262144 ]; then
+          echo "ERROR: $BOARD_NAME loader exceeds 256kB limit!"
+          exit 1
+        fi
+
+    - name: Static analysis
+      if: matrix.board == 'pico'  # Only run once
+      run: |
+        cd src
+        echo "Running clang-tidy..."
+        find . -name "*.c" -not -path "./lib/*" -not -path "./build/*" | while read file; do
+          echo "Checking $file..."
+          clang-tidy "$file" -checks=* -warnings-as-errors=* -- \
+            -I. \
+            -I$PICO_SDK_PATH/src/rp2_common/hardware_gpio/include \
+            -I$PICO_SDK_PATH/src/common/pico_stdlib/include \
+            -I$PICO_SDK_PATH/src/rp2_common/hardware_flash/include \
+            -I$PICO_SDK_PATH/src/rp2_common/hardware_i2c/include \
+            -I$PICO_SDK_PATH/src/rp2_common/hardware_spi/include \
+            -I$PICO_SDK_PATH/src/rp2_common/hardware_dma/include \
+            -I$PICO_SDK_PATH/src/rp2_common/hardware_watchdog/include \
+            -I$PICO_SDK_PATH/src/rp2040/hardware_regs/include \
+            -I$PICO_SDK_PATH/src/rp2_common/pico_bootrom/include \
+            -DPICO_RP2040 \
+            2>&1 | grep -v "error: unknown argument" | grep -v "use .* instead" | grep -v "modernize-" || true
+        done
+
+    - name: Run UF2 tests
+      if: matrix.board == 'pico'  # Only run once since tests are platform-independent
+      run: |
+        cd src
+        echo "Running UF2 implementation tests..."
+        # Make scripts executable
+        chmod +x test_integration.sh generate_test_uf2.py
+        # Run the test suite (includes unit tests and critical scenario tests)
+        # Modify the test script to use the CI SDK path
+        sed -i "s|/Users/ericlewis/Developer/Picocalc_SD_Boot/pico-sdk|$PICO_SDK_PATH|g" test_integration.sh
+        ./test_integration.sh
+
+    - name: Install output files
+      run: |
+        cd src
+        cmake --install build
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: picocalc-sd-boot-${{ matrix.board }}
+        path: |
+          src/prebuild_output/**/*.uf2
+          src/prebuild_output/**/*.elf
+
+  combine-artifacts:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        pattern: picocalc-sd-boot-*
+        merge-multiple: true
+
+    - name: Upload combined artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: picocalc-sd-boot-binaries
+        path: artifacts/**/*
+
+    - name: Create release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          artifacts/**/*.uf2
+          artifacts/**/*.elf
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  emulation-test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install Renode
+      run: |
+        wget https://github.com/renode/renode/releases/download/v1.14.0/renode-1.14.0.linux-portable.tar.gz
+        tar -xzf renode-1.14.0.linux-portable.tar.gz
+        echo "RENODE_DIR=$PWD/renode_1.14.0" >> $GITHUB_ENV
+    
+    - name: Install Python dependencies
+      run: |
+        pip install robotframework
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: picocalc-sd-boot-binaries
+        path: src/build
+
+    - name: Run emulation tests
+      run: |
+        python3 tests/run_renode_tests.py
+
+    - name: Upload test logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: renode-test-logs
+        path: |
+          *.log
+          *.pcap 

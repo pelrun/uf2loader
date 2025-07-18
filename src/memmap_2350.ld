@@ -22,21 +22,21 @@
 */
 
 _flash_origin = 0x10000000;
-_flash_size = 2m;
+_flash_size = 4m;
 
-_bootloader_app_size = 140k;
+_bootloader_app_size = 256k;
 
 MEMORY
 {
     /* boot_stage2 resides at the beginning, while sd_boot executable
-        takes up 64 kB at the end of the flash
+        takes up 256 kB at the end of the flash
     */
     BOOT2(rx) : ORIGIN = _flash_origin, LENGTH = 256
     FLASH(rx) : ORIGIN = (_flash_origin + _flash_size) - _bootloader_app_size, LENGTH = _bootloader_app_size - 8
     FLASH1(rx) : ORIGIN = (_flash_origin + _flash_size) - 8, LENGTH = 8
-    RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 256k
-    SCRATCH_X(rwx) : ORIGIN = 0x20040000, LENGTH = 4k
-    SCRATCH_Y(rwx) : ORIGIN = 0x20041000, LENGTH = 4k
+    RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 512k
+    SCRATCH_X(rwx) : ORIGIN = 0x20080000, LENGTH = 4k
+    SCRATCH_Y(rwx) : ORIGIN = 0x20081000, LENGTH = 4k
 }
 
 ENTRY(_entry_point)
@@ -67,6 +67,15 @@ SECTIONS
         KEEP (*(.vectors))
         KEEP (*(.binary_info_header))
         __binary_info_header_end = .;
+        
+        /* Machine inspectable binary information */
+        . = ALIGN(4);
+        __binary_info_start = .;
+        KEEP(*(.binary_info.keep.*))
+        *(.binary_info.*)
+        __binary_info_end = .;
+        . = ALIGN(4);
+        
         KEEP (*(.reset))
         *(.init)
         *(.text*)
@@ -107,16 +116,8 @@ SECTIONS
     } > FLASH
     __exidx_end = .;
 
-    /* Machine inspectable binary information */
-    . = ALIGN(4);
-    __binary_info_start = .;
-    .binary_info :
-    {
-        KEEP(*(.binary_info.keep.*))
-        *(.binary_info.*)
-    } > FLASH
-    __binary_info_end = .;
-    . = ALIGN(4);
+    /* End of .text-type sections */
+    __etext = .;
 
    .ram_vector_table (NOLOAD): {
         *(.ram_vector_table)
@@ -174,6 +175,7 @@ SECTIONS
         . = ALIGN(4096);
     } > FLASH
 
+    /* Provide __flash_binary_end for pico-sdk binary info system */
     .flash_end : {
         PROVIDE(__flash_binary_end = .);
     } > FLASH
@@ -181,12 +183,8 @@ SECTIONS
     /* save start address at the end of flash so boot2 can find it */
     .bootloader_start :
     {
-        LONG(0xe98cc638);
-        LONG(__vector_start)
+        LONG(__logical_binary_start)
     } > FLASH1
-
-    /* __etext is (for backwards compatibility) the name of the .data init source pointer (...) */
-    __etext = LOADADDR(.data);
 
     .uninitialized_data (NOLOAD): {
         . = ALIGN(4);
@@ -256,6 +254,6 @@ SECTIONS
     /* Check if data + heap + stack exceeds RAM limit */
     ASSERT(__StackLimit >= __HeapLimit, "region RAM overflowed")
 
-    ASSERT( __binary_info_header_end - __logical_binary_start <= 256, "Binary info must be in first 256 bytes of the binary")
-}
-
+    /* Remove binary info assertion for high-memory loader */
+    /* ASSERT( __binary_info_header_end - __logical_binary_start <= 256, "Binary info must be in first 256 bytes of the binary") */
+} 

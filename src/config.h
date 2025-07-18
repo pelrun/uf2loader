@@ -2,12 +2,13 @@
 #define CONFIG_H
 
 // GPIOs for SPI interface (SD card)
+// Note: On Pico W, consider moving to SPI1 to avoid Wi-Fi conflicts
 #define SD_SPI0         0
 #define SD_SCLK_PIN     18
 #define SD_MOSI_PIN     19
 #define SD_MISO_PIN     16
 #define SD_CS_PIN       17
-#define SD_DET_PIN 22
+#define SD_DET_PIN      22
 
 #define LCD_SPI1    1
 #define LCD_SCK_PIN 10

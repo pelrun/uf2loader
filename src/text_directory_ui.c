@@ -46,14 +46,15 @@ extern bool fs_init(void);
 #define UI_HEIGHT 280
 #define UI_X 20 // Offset from top-left
 #define UI_Y 20
-#define HEADER_TITLE_HEIGHT 20 // Height for the title header
-#define PATH_HEADER_HEIGHT 16  // Height for the current path display
-#define STATUS_BAR_HEIGHT 16   // Height for the status bar
+#define HEADER_TITLE_HEIGHT 24 // Increased height for a better look
+#define PATH_HEADER_HEIGHT 18  // Increased height
+#define STATUS_BAR_HEIGHT 18   // Increased height
 
 // UI Colors
 #define COLOR_BG BLACK
 #define COLOR_FG WHITE
 #define COLOR_HIGHLIGHT LITEGRAY
+#define COLOR_FRAME GRAY
 
 // Maximum number of directory entries
 #define MAX_ENTRIES 128
@@ -261,7 +262,9 @@ static void load_directory(const char *path)
 static void ui_draw_title(void)
 {
     draw_rect_spi(UI_X, UI_Y, UI_X + UI_WIDTH - 1, UI_Y + HEADER_TITLE_HEIGHT, BLACK);
-    draw_text(UI_X + 2, UI_Y + 2, "PicoCalc UF2 Loader " VERSION, WHITE, BLACK);
+    draw_text(UI_X + 8, UI_Y + 4, "PicoCalc Firmware Loader", WHITE, BLACK);
+    // Draw a bottom border for the title
+    draw_line_spi(UI_X, UI_Y + HEADER_TITLE_HEIGHT - 1, UI_X + UI_WIDTH - 1, UI_Y + HEADER_TITLE_HEIGHT - 1, COLOR_FRAME);
 }
 
 static void ui_draw_empty_tip(){
@@ -287,14 +290,13 @@ static void ui_draw_path_header(uint8_t nosd)
 {
     char path_header[300];
 	if(nosd) {
-	  snprintf(path_header, sizeof(path_header), "SD card not found");
+	  snprintf(path_header, sizeof(path_header), "Error: SD card not found");
 	}else{
-	  snprintf(path_header, sizeof(path_header), "Path: SD%s", current_path);
+	  snprintf(path_header, sizeof(path_header), "SD Card: %s", current_path);
 	}
     int y = UI_Y + HEADER_TITLE_HEIGHT;
     draw_rect_spi(UI_X, y, UI_X + UI_WIDTH - 1, y + PATH_HEADER_HEIGHT - 1, COLOR_BG);
-    draw_text(UI_X + 2, y + 2, path_header, COLOR_FG, COLOR_BG);
-    draw_line_spi(UI_X, y + PATH_HEADER_HEIGHT - 2, UI_X + UI_WIDTH - 1, y + PATH_HEADER_HEIGHT - 2, COLOR_FG);
+    draw_text(UI_X + 4, y + 3, path_header, COLOR_FG, COLOR_BG);
 }
 
 /**
@@ -430,10 +432,10 @@ static void ui_draw_status_bar(void)
     }
     int y = UI_Y + UI_HEIGHT - STATUS_BAR_HEIGHT;
     draw_rect_spi(UI_X, y, UI_X + UI_WIDTH - 1, UI_Y + UI_HEIGHT - 1, COLOR_BG);
-    draw_line_spi(UI_X, y, UI_X + UI_WIDTH - 1, y, COLOR_FG);
+    draw_line_spi(UI_X, y, UI_X + UI_WIDTH - 1, y, COLOR_FRAME);
     char truncated_message[UI_WIDTH / 8];
     strlcpy(truncated_message, status_message, sizeof(truncated_message));
-    draw_text(UI_X + 2, y + 2, truncated_message, COLOR_FG, COLOR_BG);
+    draw_text(UI_X + 4, y + 3, truncated_message, COLOR_FG, COLOR_BG);
 }
 
 static void ui_draw_battery_status(){
@@ -449,17 +451,21 @@ static void ui_draw_battery_status(){
     else if(pcnt == 100){pad = -8;}
 
     draw_rect_spi(UI_X + UI_WIDTH-16-20-5-8, y, UI_X + UI_WIDTH, y + HEADER_TITLE_HEIGHT, COLOR_BG);
-    draw_text(UI_X + UI_WIDTH-16-20-5+pad, y + 2, buf, COLOR_FG, COLOR_BG);
+    draw_text(UI_X + UI_WIDTH-16-20-5+pad, y + 4, buf, COLOR_FG, COLOR_BG);
     draw_battery_icon(UI_X+UI_WIDTH-16,y+4,level);
 }
 // Refresh the entire UI
 static void ui_refresh(void)
 {
+    // Draw a decorative frame around the UI
+    draw_rect_spi(UI_X - 2, UI_Y - 2, UI_X + UI_WIDTH + 1, UI_Y + UI_HEIGHT + 1, COLOR_FRAME);
+    draw_rect_spi(UI_X - 1, UI_Y - 1, UI_X + UI_WIDTH, UI_Y + UI_HEIGHT, COLOR_BG);
+
     ui_draw_title();
     ui_draw_path_header(0);
     ui_draw_directory_list();
 	if(entry_count == 0) {
-        text_directory_ui_set_status("Enter to exec.");
+        text_directory_ui_set_status("Press ENTER to run last app.");
         ui_draw_empty_tip();
 	}else{
         ui_draw_status_bar();
@@ -482,7 +488,7 @@ void process_key_event(int key)
         update_sel = 1;
         ui_draw_directory_list();
         if(status_flag) {
-            text_directory_ui_set_status("Up/Down to select, Enter to exec.");
+            text_directory_ui_set_status("Use UP/DOWN to select, ENTER to run.");
         }
         break;
     case KEY_ARROW_DOWN:
@@ -495,7 +501,7 @@ void process_key_event(int key)
         update_sel = 1;
         ui_draw_directory_list();
         if(status_flag) {
-            text_directory_ui_set_status("Up/Down to select, Enter to exec.");
+            text_directory_ui_set_status("Use UP/DOWN to select, ENTER to run.");
         }
         break;
     case KEY_ENTER:
@@ -572,7 +578,7 @@ bool text_directory_ui_init(void)
     strlcpy(current_path, "/firmware", sizeof(current_path));
     load_directory(current_path);
     if(status_flag) {
-        text_directory_ui_set_status("Up/Down to select, Enter to exec.");
+        text_directory_ui_set_status("Use UP/DOWN to select, ENTER to run.");
         status_repeat = 2;
     }
     else

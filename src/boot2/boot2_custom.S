@@ -280,8 +280,11 @@ check_return:
     beq vector_into_flash
     bx r0
 vector_into_flash:
-    // bootloader vector table address is stored at the very end of flash
-    ldr r0, =(XIP_BASE + (2*1024*1024) - 4)
+    // Dynamically use the board-specific flash size if available
+#ifndef PICO_FLASH_SIZE_BYTES
+#define PICO_FLASH_SIZE_BYTES (2*1024*1024) // Fallback to 2 MB
+#endif
+    ldr r0, =(XIP_BASE + PICO_FLASH_SIZE_BYTES - 4)
     ldr r0, [r0]
     ldr r1, =(PPB_BASE + M0PLUS_VTOR_OFFSET)
     str r0, [r1]

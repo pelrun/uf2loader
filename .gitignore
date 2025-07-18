@@ -55,4 +55,6 @@ dkms.conf
 build/
 .cache
 .vscode
+*.uf2
+*.bin
 

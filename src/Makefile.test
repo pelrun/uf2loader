@@ -1,0 +1,97 @@
+# Makefile for UF2 Implementation Tests
+
+CC = gcc
+CFLAGS = -Wall -Wextra -O2 -DTEST_MODE -I. -I../pico-sdk/src/common/boot_uf2_headers/include
+LDFLAGS = 
+
+# Test sources
+TEST_SRCS = test_uf2.c
+TEST_OBJS = $(TEST_SRCS:.c=.o)
+
+CRITICAL_TEST_SRCS = test_critical_scenarios.c
+CRITICAL_TEST_OBJS = $(CRITICAL_TEST_SRCS:.c=.o)
+
+SAFETY_TEST_SRCS = test_safety_gaps.c
+SAFETY_TEST_OBJS = $(SAFETY_TEST_SRCS:.c=.o)
+
+SHARED_TEST_SRCS = test_shared.c
+SHARED_TEST_OBJS = $(SHARED_TEST_SRCS:.c=.o)
+
+# UF2 implementation sources (compile with TEST_MODE)
+UF2_SRCS = uf2_test.c
+UF2_OBJS = $(UF2_SRCS:.c=.o)
+
+# Targets
+TARGET = test_uf2
+CRITICAL_TARGET = test_critical
+SAFETY_TARGET = test_safety_gaps
+
+# Default target
+all: $(TARGET) $(CRITICAL_TARGET) $(SAFETY_TARGET)
+
+# Build test executable
+$(TARGET): $(TEST_OBJS) $(UF2_OBJS) $(SHARED_TEST_OBJS)
+	$(CC) $(LDFLAGS) -o $@ $^
+
+# Build critical test executable
+$(CRITICAL_TARGET): $(CRITICAL_TEST_OBJS) $(UF2_OBJS) $(SHARED_TEST_OBJS)
+	$(CC) $(LDFLAGS) -o $@ $^
+
+# Build safety test executable
+$(SAFETY_TARGET): $(SAFETY_TEST_OBJS)
+	$(CC) $(LDFLAGS) -o $@ $^
+
+# Extract testable functions from uf2.c
+uf2_test.c: uf2.c
+	@echo "Extracting testable functions from uf2.c..."
+	@echo "// Extracted testable functions from uf2.c for testing" > $@
+	@echo "#include <stdint.h>" >> $@
+	@echo "#include <stddef.h>" >> $@
+	@echo "#include <stdbool.h>" >> $@
+	@echo "#include <string.h>" >> $@
+	@echo "" >> $@
+	@echo "// Mock XIP_BASE for testing" >> $@
+	@echo "#define XIP_BASE 0x10000000" >> $@
+	@echo "#define FLASH_PAGE_SIZE 256" >> $@
+	@echo "" >> $@
+	@# Extract CRC32 implementation
+	@sed -n '/static const uint32_t crc32_table/,/^}/p' uf2.c >> $@
+	@echo "" >> $@
+	@sed -n '/static uint32_t crc32_calculate/,/^}/p' uf2.c | sed 's/static uint32_t/uint32_t/' >> $@
+	@echo "" >> $@
+	@# Extract verify_flash_crc32 (modified for testing)
+	@echo "bool verify_flash_crc32(uint32_t addr, const uint8_t *expected_data, size_t size) {" >> $@
+	@echo "    extern uint8_t mock_flash[];" >> $@
+	@echo "    uint32_t expected_crc = crc32_calculate(expected_data, size);" >> $@
+	@echo "    uint8_t *flash_ptr = &mock_flash[addr];" >> $@
+	@echo "    uint32_t flash_crc = crc32_calculate(flash_ptr, size);" >> $@
+	@echo "    return expected_crc == flash_crc;" >> $@
+	@echo "}" >> $@
+
+# Compile test files
+%.o: %.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+# Run tests
+test: $(TARGET) $(CRITICAL_TARGET) $(SAFETY_TARGET)
+	./$(TARGET)
+	./$(CRITICAL_TARGET)
+	./$(SAFETY_TARGET)
+
+# Run unit tests only
+test-unit: $(TARGET)
+	./$(TARGET)
+
+# Run critical tests only  
+test-critical: $(CRITICAL_TARGET)
+	./$(CRITICAL_TARGET)
+
+# Clean
+clean:
+	rm -f $(TEST_OBJS) $(CRITICAL_TEST_OBJS) $(SAFETY_TEST_OBJS) $(SHARED_TEST_OBJS) $(UF2_OBJS) $(TARGET) $(CRITICAL_TARGET) $(SAFETY_TARGET) uf2_test.c
+
+# Generate test UF2 files
+generate-test-files:
+	python3 generate_test_uf2.py
+
+.PHONY: all test clean generate-test-files 

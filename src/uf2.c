@@ -23,12 +23,63 @@
 
 #define BOOT2_SIZE 256
 
+extern int __logical_binary_start;
+
+// Simple CRC32 implementation for flash verification
+// Using the same polynomial as btstack: 0x04c11db7 (ISO 3309)
+static const uint32_t crc32_table[16] = {
+    0x00000000, 0x1db71064, 0x3b6e20c8, 0x26d930ac,
+    0x76dc4190, 0x6b6b51f4, 0x4db26158, 0x5005713c,
+    0xedb88320, 0xf00f9344, 0xd6d6a3e8, 0xcb61b38c,
+    0x9b64c2b0, 0x86d3d2d4, 0xa00ae278, 0xbdbdf21c
+};
+
+static uint32_t crc32_calculate(const uint8_t *data, size_t size) {
+    uint32_t crc = 0xffffffff;
+    for (size_t i = 0; i < size; i++) {
+        int tbl_idx = crc ^ data[i];
+        crc = crc32_table[tbl_idx & 0x0f] ^ (crc >> 4);
+        tbl_idx = crc ^ (data[i] >> 4);
+        crc = crc32_table[tbl_idx & 0x0f] ^ (crc >> 4);
+    }
+    return ~crc;
+}
+
 #ifdef DRY_RUN
 #define FLASH_ERASE(a1, a2) printf("Erase %x-%x\n", (a1), (a2))
 #define FLASH_PROG(a1, a2, a3) printf("Flash %d bytes to %x\n", (a3), XIP_BASE + (a1))
 #else
-#define FLASH_ERASE(a1, a2) flash_range_erase((a1), (a2))
-#define FLASH_PROG(a1, a2, a3) flash_range_program((a1), (a2), (a3))
+// Keep flash operations in RAM for safety
+#define FLASH_ERASE(a1, a2) flash_range_erase_ram((a1), (a2))
+#define FLASH_PROG(a1, a2, a3) do { \
+    flash_range_program_ram((a1), (a2), (a3)); \
+    __asm volatile ("dsb sy; isb sy" ::: "memory"); /* Ensure flash write completion */ \
+    if (!verify_flash_crc32((a1), (a2), (a3))) { \
+        printf("Flash verification failed at 0x%x\n", XIP_BASE + (a1)); \
+        return false; \
+    } \
+} while(0)
+
+// RAM-based wrappers for flash operations
+static void __no_inline_not_in_flash_func(flash_range_erase_ram)(uint32_t addr, size_t size) {
+    flash_range_erase(addr, size);
+}
+
+static void __no_inline_not_in_flash_func(flash_range_program_ram)(uint32_t addr, const uint8_t *data, size_t size) {
+    flash_range_program(addr, data, size);
+}
+
+// CRC32 verification after writing
+static bool __no_inline_not_in_flash_func(verify_flash_crc32)(uint32_t addr, const uint8_t *expected_data, size_t size) {
+    // Calculate CRC of expected data
+    uint32_t expected_crc = crc32_calculate(expected_data, size);
+    
+    // Calculate CRC of flash data
+    uint8_t *flash_ptr = (uint8_t *)(XIP_BASE + addr);
+    uint32_t flash_crc = crc32_calculate(flash_ptr, size);
+    
+    return expected_crc == flash_crc;
+}
 #endif
 
 typedef struct
@@ -65,6 +116,9 @@ bool load_application_from_uf2(const char* filename)
     DEBUG_PRINT("open %s fail: %s\n", filename, strerror(errno));
     return false;
   }
+
+  // Mark flash operation as incomplete (recovery marker)
+  set_prog_info(XIP_BASE + 0x10000, 0xFFFFFFFF, filename);
 
   prog_state_t s = {0};
 
@@ -223,6 +277,13 @@ static bool check_generic_block(const struct uf2_block* b)
   if (b->target_addr < PROG_AREA_BEGIN || b->target_addr >= PROG_AREA_END)
   {
     DEBUG_PRINT("Out of bounds %x > %x >= %x\n", PROG_AREA_BEGIN, b->target_addr, PROG_AREA_END);
+    return false;
+  }
+
+  // Explicit bootloader boundary enforcement
+  uint32_t bootloader_start = (uint32_t)&__logical_binary_start;
+  if (b->target_addr + FLASH_PAGE_SIZE > bootloader_start) {
+    DEBUG_PRINT("Block would overwrite bootloader at %x\n", bootloader_start);
     return false;
   }
 

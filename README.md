@@ -1,54 +1,92 @@
-# Picocalc_SD_Boot
+# Picocalc SD Bootloader
 
-`Picocalc_SD_Boot` is a custom bootloader for the Raspberry Pi Pico. This bootloader provides the functionality to load and execute applications from an SD card, designed to enable PicoCalc to load firmware to the Pico using an SD card easily.
+`Picocalc_SD_Boot` is a custom, high-memory bootloader for the Raspberry Pi Pico (RP2040) and Pico 2 W (RP2350). It allows you to load and flash `.uf2` firmware images directly from an SD card, providing a fast and convenient way to update your device without needing to connect it to a computer.
 
 <div align="center">
-    <img src="img/sd_boot.jpg" alt="sdboot" width="80%">
+    <img src="img/sd_boot.jpg" alt="Picocalc SD Bootloader in action" width="80%">
 </div>
 
-## 🚧 Improvement Plans
-work in progress plans [Feature Request Post](https://forum.clockworkpi.com/t/i-made-an-app-that-dynamically-load-firmware-from-sd-card/16664/25?u=adwuard)
-- [ ] Add transparent app support for Pico 2 [Address Translation (see page 364 of the RP2350 datasheet, section 5.1.19)](https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf)
-- [ ] USB Mass Storage mode for SD card. [Related Demo Code](https://github.com/hathach/tinyusb/tree/master/examples/device/cdc_msc/src)
+## Features
 
+- **Dual-Platform Support:** Fully compatible with both the RP2040 (Pico) and the new RP2350 (Pico 2 W).
+- **High-Memory Layout:** The bootloader resides in the upper portion of the flash memory, leaving the standard `0x10000000` address space free for your application.
+- **RP2350 ATU Support:** Utilizes the RP2350's Address Translation Unit (ATU) to seamlessly map the application into the standard memory space.
+- **Polished User Interface:** A clean, intuitive text-based UI for easy navigation and file selection, complete with a decorative frame and clear on-screen instructions.
+- **Robust Flashing:** Features a hardened flash writer with CRC32 checks to ensure data integrity and prevent corrupted updates.
+- **SD Card Flexibility:** Supports both SDHC and SDXC cards with FAT32 or exFAT filesystems, including a high-speed mode for faster flashing.
 
-## Bootloader Build From Scratch
-Clone the source code and initialize the submodules.
+## Building the Bootloader
 
-```bash
-git clone https://github.com/adwuard/Picocalc_SD_Boot.git
-cd Picocalc_SD_Boot
-git submodule update --init --recursive
-```
+To build the bootloader, you will need the Pico SDK and a GCC ARM toolchain.
 
-Build the bootloader.
+1.  **Clone the repository and initialize submodules:**
+    ```bash
+    git clone https://github.com/adwuard/Picocalc_SD_Boot.git
+    cd Picocalc_SD_Boot
+    git submodule update --init --recursive
+    ```
 
-```bash
-cd ./src
-mkdir build; cd build
-PICO_SDK_PATH=/path/to/pico-sdk cmake ..
-make
-```
+2.  **Create a build directory:**
+    ```bash
+    cd src
+    mkdir build && cd build
+    ```
 
-## Technical Implementation Notes
-### Bootloader detection/size management
-As the RP2040 does not have a mechanism for write protecting flash regions, the bootloader can be accidentally corrupted by the application if it writes to the same area. Devs can add the ability to detect the bootloader and it's size at runtime and therefore know exactly how much flash is available to be used.
+3.  **Configure the build for your target platform:**
 
-To do this, read the 8 bytes at the very end of the flash area. This consists of a 32-bit magic number (`0xe98cc638`) at XIP_BASE+0x1ffff8, and the start address of the bootloader at XIP_BASE+0x1ffffc. The application is free to write anywhere below this address.
+    *   **For RP2040 (Pico):**
+        ```bash
+        cmake -D PICO_SDK_PATH=/path/to/pico-sdk ..
+        ```
+
+    *   **For RP2350 (Pico 2 W):**
+        ```bash
+        cmake -D PICO_SDK_PATH=/path/to/pico-sdk -D BUILD_PICO2=ON ..
+        ```
+
+4.  **Build the bootloader:**
+    ```bash
+    make
+    ```
+    The compiled `.uf2` file will be located in the `src/build/` directory.
+
+## Technical Implementation
+
+### Bootloader Detection and Size Management
+
+The bootloader uses the last 8 bytes of flash to store a magic number (`0xe98cc638`) and the bootloader's start address. This allows applications to detect the presence of the bootloader at runtime and determine the available application space, preventing accidental corruption.
 
 ### Flash Update Mechanism
-The bootloader implements a safe update mechanism with the following features:
 
-- The bootloader itself resides at the top of the flash area and is never overwritten during updates
-- Only the application region of flash (starting at 256b) is updated using `flash_range_erase` and `flash_range_program`
+The flash update process is designed for safety and reliability:
+- The bootloader itself is never overwritten during an update.
+- The application area is erased and programmed using the pico-sdk's `flash_range_erase` and `flash_range_program` functions.
+- All data written to flash is verified with a CRC32 checksum to ensure integrity.
 
 ## Credits
-- [Hiroyuki Oyama](https://github.com/oyama/pico-sdcard-boot): Special thanks for the firmware loader mechanism and VFS file system.
-  - https://github.com/oyama/pico-sdcard-boot
-  - https://github.com/oyama/pico-vfs
-- [TheKiwil](https://github.com/TheKiwil/): Special thanks for contributions on supporting pico2 boards with new custom linker script.
-- [muzkr](https://github.com/muzkr/hachi/): Special thanks for the initial boot2/high-mem implementation
 
-## Read More
-- Blog on this repository, and more technical detail about bootloader. -->[Blog Page](https://hsuanhanlai.com/writting-custom-bootloader-for-RPI-Pico/)
-- Fourm Page and Discussion: [Clockwork Pi Fourm](https://forum.clockworkpi.com/t/i-made-an-app-that-dynamically-load-firmware-from-sd-card/16664/24)
+- **Hiroyuki Oyama:** For the original SD card bootloader mechanism and VFS implementation.
+- **TheKiwil:** For contributions to the RP2350 port, including the custom linker script.
+- **muzkr:** For the initial high-memory bootloader implementation.
+
+## Further Reading
+
+- **Blog Post:** For a detailed technical write-up, see the [project blog page](https://hsuanhanlai.com/writting-custom-bootloader-for-RPI-Pico/).
+- **Forum Discussion:** Join the conversation on the [Clockwork Pi Forum](https://forum.clockworkpi.com/t/i-made-an-app-that-dynamically-load-firmware-from-sd-card/16664/24).
+
+## Local CI/CD Testing with `act`
+
+You can run the full CI/CD pipeline locally using [act](https://github.com/nektos/act). This allows you to test your changes in an environment that mirrors the GitHub Actions runners.
+
+1.  **Install `act`:** Follow the official [installation instructions](https://github.com/nektos/act#installation).
+
+2.  **Build the custom Docker image:**
+    ```bash
+    docker build -t picocalc-boot-env:latest -f docker/Dockerfile .
+    ```
+
+3.  **Run the `emulation-test` job:**
+    ```bash
+    act -j emulation-test --container-architecture linux/amd64 -P ubuntu-latest=picocalc-boot-env:latest
+    ```
+    This command will execute the `emulation-test` job defined in `.github/workflows/build.yml` using your local Docker image.

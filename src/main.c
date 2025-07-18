@@ -33,6 +33,7 @@
 
 #include "proginfo.h"
 #include "uf2.h"
+#include "atu.h"
 
 
 // Vector and RAM offset
@@ -40,7 +41,6 @@
 #define VTOR_OFFSET M0PLUS_VTOR_OFFSET
 #define MAX_RAM 0x20040000
 #elif PICO_RP2350
-#error RP2350 is not currently supported
 #define VTOR_OFFSET M33_VTOR_OFFSET
 #define MAX_RAM 0x20080000
 #endif
@@ -61,7 +61,7 @@ bool fs_init(void)
                                               SD_MISO_PIN,
                                               SD_SCLK_PIN,
                                               SD_CS_PIN,
-                                              125000000 / 2 / 4, // 15.6MHz
+                                              25 * 1000 * 1000, // 25MHz
                                               true);
     filesystem_t *fat = filesystem_fat_create();
     int err = fs_mount("/", fat, sd);
@@ -202,6 +202,16 @@ int main()
 {
     stdio_init_all();
 
+#if PICO_RP2350
+    // Initialize ATU for application remapping
+    if (!atu_init_app_remap()) {
+        DEBUG_PRINT("ATU remap alignment error\n");
+        // Fallback: reboot to USB boot mode
+        uint gpio_mask = 0u;
+        reset_usb_boot(gpio_mask, 0);
+    }
+#endif
+
     uart_init(uart0, 115200);
     uart_set_format(uart0, 8, 1, UART_PARITY_NONE); // 8-N-1
     uart_set_fifo_enabled(uart0, false);
@@ -213,8 +223,18 @@ int main()
 
     keypad_init();
 
-    // Check bootmode now: 0=default, 1=sdcard, 2=fwupdate
-    int bootmode = read_bootmode();
+    // Check for recovery mode: If prog_info indicates incomplete flash, recover
+    int bootmode;
+    volatile prog_info_t const *prog_info = get_prog_info();
+    if (prog_info->prog_addr != 0 && prog_info->size == 0xFFFFFFFF) {
+        // Size of 0xFFFFFFFF indicates incomplete flash operation
+        DEBUG_PRINT("Incomplete flash detected, entering recovery mode\n");
+        clear_prog_info();
+        bootmode = KEY_ARROW_UP; // Force SD card boot
+    } else {
+        // Check bootmode now: 0=default, 1=sdcard, 2=fwupdate
+        bootmode = read_bootmode();
+    }
     DEBUG_PRINT("bootmode = %d\n", bootmode);
     switch(bootmode) {
       case KEY_ARROW_UP:
