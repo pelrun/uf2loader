@@ -53,8 +53,13 @@ dkms.conf
 
 # custom
 build/
+build_pico2/
+build_pico2_w/
+build_tests/
 .cache
 .vscode
 *.uf2
 *.bin
-
+*.html
+output.xml
+__pycache__/

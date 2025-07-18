@@ -1,3 +1,7 @@
-[submodule "src/lib/pico-vfs"]
-	path = src/lib/pico-vfs
+[submodule "pico-vfs"]
+	path = pico-vfs
 	url = https://github.com/oyama/pico-vfs.git
+
+[submodule "pico-sdk"]
+	path = pico-sdk
+	url = https://github.com/raspberrypi/pico-sdk.git

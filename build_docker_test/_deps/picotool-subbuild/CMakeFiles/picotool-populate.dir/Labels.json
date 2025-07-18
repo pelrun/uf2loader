@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/workspace/build_docker_test/_deps/picotool-subbuild/CMakeFiles/picotool-populate"
+		},
+		{
+			"file" : "/workspace/build_docker_test/_deps/picotool-subbuild/CMakeFiles/picotool-populate.rule"
+		},
+		{
+			"file" : "/workspace/build_docker_test/_deps/picotool-subbuild/CMakeFiles/picotool-populate-complete.rule"
+		},
+		{
+			"file" : "/workspace/build_docker_test/_deps/picotool-subbuild/picotool-populate-prefix/src/picotool-populate-stamp/picotool-populate-build.rule"
+		},
+		{
+			"file" : "/workspace/build_docker_test/_deps/picotool-subbuild/picotool-populate-prefix/src/picotool-populate-stamp/picotool-populate-configure.rule"
+		},
+		{
+			"file" : "/workspace/build_docker_test/_deps/picotool-subbuild/picotool-populate-prefix/src/picotool-populate-stamp/picotool-populate-download.rule"
+		},
+		{
+			"file" : "/workspace/build_docker_test/_deps/picotool-subbuild/picotool-populate-prefix/src/picotool-populate-stamp/picotool-populate-install.rule"
+		},
+		{
+			"file" : "/workspace/build_docker_test/_deps/picotool-subbuild/picotool-populate-prefix/src/picotool-populate-stamp/picotool-populate-mkdir.rule"
+		},
+		{
+			"file" : "/workspace/build_docker_test/_deps/picotool-subbuild/picotool-populate-prefix/src/picotool-populate-stamp/picotool-populate-patch.rule"
+		},
+		{
+			"file" : "/workspace/build_docker_test/_deps/picotool-subbuild/picotool-populate-prefix/src/picotool-populate-stamp/picotool-populate-test.rule"
+		},
+		{
+			"file" : "/workspace/build_docker_test/_deps/picotool-subbuild/picotool-populate-prefix/src/picotool-populate-stamp/picotool-populate-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"picotool-populate"
+		],
+		"name" : "picotool-populate"
+	}
+}

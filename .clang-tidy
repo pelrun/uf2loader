@@ -1,0 +1,123 @@
+---
+# Clang-Tidy configuration for Pico bootloader
+# Focuses on safety, security, and embedded best practices
+
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-reserved-identifier,
+  cert-*,
+  -cert-dcl37-c,
+  -cert-dcl51-cpp,
+  clang-analyzer-*,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
+  cppcoreguidelines-*,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-type-vararg,
+  -cppcoreguidelines-avoid-non-const-global-variables,
+  hicpp-*,
+  -hicpp-vararg,
+  -hicpp-no-array-decay,
+  misc-*,
+  -misc-no-recursion,
+  modernize-*,
+  -modernize-use-trailing-return-type,
+  performance-*,
+  portability-*,
+  readability-*,
+  -readability-magic-numbers,
+  -readability-function-cognitive-complexity,
+  -readability-isolate-declaration,
+
+WarningsAsErrors: >
+  bugprone-sizeof-expression,
+  bugprone-string-constructor,
+  bugprone-string-integer-assignment,
+  bugprone-suspicious-string-compare,
+  bugprone-use-after-move,
+  cert-err34-c,
+  cert-err52-cpp,
+  cert-err58-cpp,
+  cert-err60-cpp,
+  cert-flp30-c,
+  cert-msc50-cpp,
+  cert-msc51-cpp,
+  cert-str34-c,
+  clang-analyzer-core.DivideZero,
+  clang-analyzer-core.NullDereference,
+  clang-analyzer-core.uninitialized.Assign,
+  clang-analyzer-cplusplus.NewDelete,
+  clang-analyzer-cplusplus.NewDeleteLeaks,
+  clang-analyzer-deadcode.DeadStores,
+  clang-analyzer-security.FloatLoopCounter,
+  clang-analyzer-security.insecureAPI.UncheckedReturn,
+  clang-analyzer-unix.Malloc,
+  clang-analyzer-unix.MallocSizeof,
+  cppcoreguidelines-pro-type-member-init,
+  hicpp-exception-baseclass,
+  misc-redundant-expression,
+  misc-unused-parameters,
+  performance-move-const-arg,
+  readability-container-size-empty,
+
+CheckOptions:
+  - key: bugprone-assert-side-effect.AssertMacros
+    value: 'assert,ASSERT'
+  - key: bugprone-sizeof-expression.WarnOnSizeOfConstant
+    value: '1'
+  - key: cert-dcl16-c.NewSuffixes
+    value: 'L;LL;LU;LLU'
+  - key: cert-oop54-cpp.WarnOnlyIfThisHasSuspiciousField
+    value: '0'
+  - key: cppcoreguidelines-narrowing-conversions.PedanticMode
+    value: '1'
+  - key: hicpp-multiway-paths-covered.WarnOnMissingElse
+    value: '1'
+  - key: hicpp-signed-bitwise.IgnorePositiveIntegerLiterals
+    value: '0'
+  - key: misc-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic
+    value: '1'
+  - key: performance-inefficient-string-concatenation.StrictMode
+    value: '1'
+  - key: readability-braces-around-statements.ShortStatementLines
+    value: '1'
+  - key: readability-function-size.LineThreshold
+    value: '100'
+  - key: readability-function-size.StatementThreshold
+    value: '50'
+  - key: readability-function-size.BranchThreshold
+    value: '15'
+  - key: readability-function-size.ParameterThreshold
+    value: '6'
+  - key: readability-identifier-naming.NamespaceCase
+    value: 'lower_case'
+  - key: readability-identifier-naming.ClassCase
+    value: 'CamelCase'
+  - key: readability-identifier-naming.StructCase
+    value: 'lower_case'
+  - key: readability-identifier-naming.FunctionCase
+    value: 'lower_case'
+  - key: readability-identifier-naming.VariableCase
+    value: 'lower_case'
+  - key: readability-identifier-naming.ConstantCase
+    value: 'UPPER_CASE'
+  - key: readability-identifier-naming.EnumConstantCase
+    value: 'UPPER_CASE'
+  - key: readability-identifier-naming.MacroDefinitionCase
+    value: 'UPPER_CASE'
+  - key: readability-implicit-bool-conversion.AllowIntegerConditions
+    value: '1'
+  - key: readability-implicit-bool-conversion.AllowPointerConditions
+    value: '1'
+  - key: readability-simplify-boolean-expr.ChainedConditionalReturn
+    value: '1'
+  - key: readability-simplify-boolean-expr.ChainedConditionalAssignment
+    value: '1'
+
+HeaderFilterRegex: '.*\.(h|hpp)$'
+ExcludeHeaderFilterRegex: 'pico-sdk/.*'
+
+# Specific rules for embedded/bootloader code
+FormatStyle: 'file' 

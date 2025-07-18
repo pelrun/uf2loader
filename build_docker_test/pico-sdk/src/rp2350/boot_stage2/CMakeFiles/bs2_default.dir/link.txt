@@ -1,0 +1,1 @@
+/usr/bin/arm-none-eabi-gcc -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mfloat-abi=softfp -mcmse -g -O3 -DNDEBUG -Wl,--build-id=none --specs=nosys.specs -nostartfiles -Wl,--script=/workspace/pico-sdk/src/rp2350/boot_stage2/boot_stage2.ld -Wl,-Map=bs2_default.elf.map CMakeFiles/bs2_default.dir/compile_time_choice.S.o -o bs2_default.elf 

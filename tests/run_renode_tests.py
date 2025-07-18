@@ -2,28 +2,39 @@ import os
 import sys
 import subprocess
 import time
-from robot.api import logger
 from renode_test import *
 from generate_test_files import create_corrupted_uf2
 
 # Define paths
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 RENODE_DIR = os.path.join(ROOT_DIR, 'renode')
-BUILD_DIR = os.path.join(ROOT_DIR, 'src', 'build')
+BUILD_DIR = os.path.join(ROOT_DIR, 'build')
 
 # Test configurations
 RENODE_PLATFORMS = {
     'pico': 'platforms/boards/raspberry_pi_pico.repl',
-    'pico2_w': 'platforms/boards/raspberry_pi_pico2w.repl'
+    'pico2': 'platforms/boards/raspberry_pi_pico2.repl'
 }
 
 ELF_FILES = {
-    'pico': os.path.join(BUILD_DIR, 'picocalc_sd_boot_pico.elf'),
-    'pico2_w': os.path.join(BUILD_DIR, 'picocalc_sd_boot_pico2_w.elf')
+    'pico': os.path.join(BUILD_DIR, 'picocalc_sd_boot.elf'),
+    'pico2': os.path.join(BUILD_DIR, 'picocalc_sd_boot.elf')
 }
 
 SD_CARD_IMG = os.path.join(BUILD_DIR, 'sd_card.img')
 FIRMWARE_DIR = '/tmp/sd_mount/firmware'
+
+def setup_logger():
+    """Set up basic logging if robot framework not available"""
+    import logging
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    return logging.getLogger(__name__)
+
+# Try to use robot logger, fall back to standard logging
+try:
+    from robot.api import logger
+except ImportError:
+    logger = setup_logger()
 
 def send_key(renode_test, key):
     """Sends a simulated keypress to the UART."""
@@ -83,7 +94,7 @@ def main():
         subprocess.run(['git', 'clone', 'https://github.com/renode/renode.git', RENODE_DIR], check=True)
 
     pico_uf2 = ELF_FILES['pico'].replace('.elf', '.uf2')
-    pico2_uf2 = ELF_FILES['pico2_w'].replace('.elf', '.uf2')
+    pico2_uf2 = ELF_FILES['pico2'].replace('.elf', '.uf2')
     corrupted_pico_dir = os.path.join(BUILD_DIR, 'corrupted_pico')
     corrupted_pico2_dir = os.path.join(BUILD_DIR, 'corrupted_pico2_w')
     

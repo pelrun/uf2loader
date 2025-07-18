@@ -1,44 +1,33 @@
-FROM ubuntu:22.04
+# Use Renode's official Docker image as base
+FROM antmicro/renode:latest
 
-# Set frontend to non-interactive
-ENV DEBIAN_FRONTEND=noninteractive
+# Switch to root to install additional packages
+USER root
 
-# Install base dependencies
+# Install ARM toolchain and Python dependencies
 RUN apt-get update && apt-get install -y \
+    # Build tools for bootloader
     build-essential \
     cmake \
     gcc-arm-none-eabi \
     libnewlib-arm-none-eabi \
     libstdc++-arm-none-eabi-newlib \
-    clang-tidy \
+    # Python for tests
     python3 \
     python3-pip \
     git \
-    wget \
-    tar \
-    --no-install-recommends && \
-    rm -rf /var/lib/apt/lists/*
+    # Clean up
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Python packages
+# Install Python packages for tests
 RUN pip3 install robotframework
 
-# Install Renode
-RUN wget https://github.com/renode/renode/releases/download/v1.14.0/renode-1.14.0.linux-portable.tar.gz -O /tmp/renode.tar.gz && \
-    tar -xzf /tmp/renode.tar.gz -C /opt && \
-    rm /tmp/renode.tar.gz
+# Set PICO_SDK_PATH to use the mounted workspace
+ENV PICO_SDK_PATH=/workspace/pico-sdk
 
-# Set up environment variables
-ENV RENODE_DIR=/opt/renode_1.14.0
-ENV PATH="/opt/renode_1.14.0:${PATH}"
-
-# Create a non-root user
-RUN useradd -ms /bin/bash user
-USER user
-WORKDIR /home/user
-
-# Copy pico-sdk
-COPY --chown=user:user pico-sdk /home/user/pico-sdk
-ENV PICO_SDK_PATH=/home/user/pico-sdk
+# Switch back to the user
+USER developer
+WORKDIR /home/developer
 
 # Set the entrypoint
 ENTRYPOINT ["/bin/bash"] 

@@ -3,7 +3,14 @@ import threading
 import time
 import os
 import sys
-from robot.api import logger
+
+# Try to use robot logger, fall back to standard logging
+try:
+    from robot.api import logger
+except ImportError:
+    import logging
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logger = logging.getLogger(__name__)
 
 class RenodeTest:
     """A helper class to manage Renode simulation instances."""

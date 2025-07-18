@@ -1,0 +1,21 @@
+# Simple test script for Picocalc SD Boot
+mach create "pico"
+machine LoadPlatformDescription @platforms/boards/raspberryPi_pico-rp2040.repl
+
+# Load bootloader ELF
+sysbus LoadELF @/Users/ericlewis/Developer/Picocalc_SD_Boot/build/picocalc_sd_boot.elf
+
+# Create a minimal SD card simulation
+machine PyDevFromString '''
+from Antmicro.Renode.Peripherals.SD import SDCard
+sd_card = SDCard(blockSize=512, blockCount=524288)  # 256MB
+'''
+connector Connect sysbus.spi1 sd_card
+
+# Configure UART to show output
+showAnalyzer sysbus.uart0
+
+# Start the simulation
+start
+
+echo "Bootloader test started. Press Ctrl+C to stop." 

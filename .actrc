@@ -1,0 +1,32 @@
+# Act Configuration for Picocalc SD Boot
+# This file configures act to simulate GitHub Actions locally
+
+# Use act-specific images that include Node.js and other GitHub Actions dependencies
+--platform ubuntu-latest=catthehacker/ubuntu:act-latest
+--platform ubuntu-22.04=catthehacker/ubuntu:act-22.04
+
+# Note: These images are larger but include Node.js, which is required for GitHub Actions
+# If you need smaller images, use ubuntu:22.04 but you'll need to install Node.js manually
+
+# Container options for privileged operations (apt-get, etc)
+--container-options --privileged
+
+# Bind mount workspace correctly
+-b
+
+# Set common environment variables
+--env GITHUB_ACTIONS=true
+--env CI=true
+--env GITHUB_WORKSPACE=/workspace
+--env RUNNER_OS=Linux
+--env RUNNER_ARCH=ARM64
+
+# For Apple Silicon Macs - check if ARM64 images are available
+# If not, it will fall back to emulation which is slower
+--container-architecture linux/arm64
+
+# GitHub Token for external actions (set GITHUB_TOKEN env var)
+# --secret GITHUB_TOKEN=$GITHUB_TOKEN
+
+# Uncomment to use local act cache directory
+# --cache-server-dir /tmp/act-cache 

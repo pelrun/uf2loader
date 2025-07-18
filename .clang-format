@@ -1,0 +1,17 @@
+Language: Cpp
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 80
+AccessModifierOffset: -4
+AlignConsecutiveMacros: true
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+AlignOperands: true
+AlignTrailingComments: true
+BreakBeforeBraces: Allman
+BinPackArguments: false
+BinPackParameters: false
+AllowShortFunctionsOnASingleLine: None
+AlwaysBreakTemplateDeclarations: Yes 

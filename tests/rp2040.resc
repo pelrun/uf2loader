@@ -1,0 +1,36 @@
+using sysbus
+mach create "rp2040"
+
+machine LoadPlatformDescription @platforms/boards/raspberry-pi-pico.repl
+
+# Configure CPU
+cpu0 IsHalted false
+
+# Configure memory regions
+sysbus LoadBinary $bin 0x10000000
+
+# Set up peripherals
+machine PyDevFromFile @scripts/pydev/rolling-bit.py 0x400D0000 0x4 True "syscfg"
+
+# Configure UART for bootloader output
+uart0 CreateFileBackend @uart0.log
+uart0 WriteChar `\n`
+
+# Configure USB for UF2 updates
+machine PyDevFromFile @scripts/pydev/rp2040_usb.py 0x50110000 0x1000 True "usb"
+
+# Configure flash memory
+machine PyDevFromFile @scripts/pydev/flash_memory.py 0x10000000 0x200000 True "flash"
+
+# Configure watchdog
+machine PyDevFromFile @scripts/pydev/watchdog.py 0x40058000 0x1000 True "watchdog"
+
+# Configure GPIO banks
+machine PyDevFromFile @scripts/pydev/gpio.py 0x40014000 0x1000 True "gpio0"
+machine PyDevFromFile @scripts/pydev/gpio.py 0x40018000 0x1000 True "gpio1"
+
+# Configure DMA
+machine PyDevFromFile @scripts/pydev/dma.py 0x50000000 0x1000 True "dma"
+
+# Set machine speed
+machine SetClockSource cpu 
