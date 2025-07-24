@@ -1,40 +1,17 @@
-/* Based on GCC ARM embedded samples.
-   Defines the following symbols for use by code:
-    __exidx_start
-    __exidx_end
-    __etext
-    __data_start__
-    __preinit_array_start
-    __preinit_array_end
-    __init_array_start
-    __init_array_end
-    __fini_array_start
-    __fini_array_end
-    __data_end__
-    __bss_start__
-    __bss_end__
-    __end__
-    end
-    __HeapLimit
-    __StackLimit
-    __StackTop
-    __stack (== StackTop)
-*/
 
-_flash_origin = 0x10000000;
+_flash_base = 0x10000000;
 _flash_size = 2m;
 
-_bootloader_app_size = 140k;
+_btstack_flash_size = 8k;
+_bootloader_app_size = 12k;
+_bootloader_ram_size = 4k;
+
 
 MEMORY
 {
-    /* boot_stage2 resides at the beginning, while sd_boot executable
-        takes up 64 kB at the end of the flash
-    */
-    BOOT2(rx) : ORIGIN = _flash_origin, LENGTH = 256
-    FLASH(rx) : ORIGIN = (_flash_origin + _flash_size) - _bootloader_app_size, LENGTH = _bootloader_app_size - 8
-    FLASH1(rx) : ORIGIN = (_flash_origin + _flash_size) - 8, LENGTH = 8
-    RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 256k
+    BOOT2(rx) : ORIGIN = _flash_base, LENGTH = 256
+    FLASH(rx) : ORIGIN = (_flash_base + _flash_size) - _bootloader_app_size - _btstack_flash_size, LENGTH = _bootloader_app_size
+    RAM(rwx) : ORIGIN =  0x20040000-_bootloader_ram_size, LENGTH = _bootloader_ram_size
     SCRATCH_X(rwx) : ORIGIN = 0x20040000, LENGTH = 4k
     SCRATCH_Y(rwx) : ORIGIN = 0x20041000, LENGTH = 4k
 }
@@ -61,12 +38,21 @@ SECTIONS
     ASSERT(__boot2_end__ - __boot2_start__ == 256,
         "ERROR: Pico second stage bootloader must be 256 bytes in size")
 
+    /* The second stage will always enter the image at the start of .text.
+       The debugger will use the ELF entry point, which is the _entry_point
+       symbol if present, otherwise defaults to start of .text.
+       This can be used to transfer control back to the bootrom on debugger
+       launches only, to perform proper flash setup.
+    */
+
     .text : {
         __vector_start = .;
         __logical_binary_start = .;
         KEEP (*(.vectors))
         KEEP (*(.binary_info_header))
         __binary_info_header_end = .;
+        KEEP (*(.embedded_block))
+        __embedded_block_end = .;
         KEEP (*(.reset))
         /* TODO revisit this now memset/memcpy/float in ROM */
         /* bit of a hack right now to exclude all floating point and time critical (e.g. memset, memcpy) code from
@@ -86,6 +72,27 @@ SECTIONS
         *(EXCLUDE_FILE(*crtend?.o *crtend.o) .dtors)
         *(SORT(.dtors.*))
         *(.dtors)
+
+        . = ALIGN(4);
+        /* preinit data */
+        PROVIDE_HIDDEN (__preinit_array_start = .);
+        KEEP(*(SORT(.preinit_array.*)))
+        KEEP(*(.preinit_array))
+        PROVIDE_HIDDEN (__preinit_array_end = .);
+
+        . = ALIGN(4);
+        /* init data */
+        PROVIDE_HIDDEN (__init_array_start = .);
+        KEEP(*(SORT(.init_array.*)))
+        KEEP(*(.init_array))
+        PROVIDE_HIDDEN (__init_array_end = .);
+
+        . = ALIGN(4);
+        /* finit data */
+        PROVIDE_HIDDEN (__fini_array_start = .);
+        *(SORT(.fini_array.*))
+        *(.fini_array)
+        PROVIDE_HIDDEN (__fini_array_end = .);
 
         *(.eh_frame*)
         . = ALIGN(4);
@@ -121,8 +128,13 @@ SECTIONS
     __binary_info_end = .;
     . = ALIGN(4);
 
-   .ram_vector_table (NOLOAD): {
+    .ram_vector_table (NOLOAD): {
         *(.ram_vector_table)
+    } > RAM
+
+    .uninitialized_data (NOLOAD): {
+        . = ALIGN(4);
+        *(.uninitialized_data*)
     } > RAM
 
     .data : {
@@ -149,57 +161,50 @@ SECTIONS
         PROVIDE_HIDDEN (__mutex_array_end = .);
 
         . = ALIGN(4);
-        /* preinit data */
-        PROVIDE_HIDDEN (__preinit_array_start = .);
-        KEEP(*(SORT(.preinit_array.*)))
-        KEEP(*(.preinit_array))
-        PROVIDE_HIDDEN (__preinit_array_end = .);
-
-        . = ALIGN(4);
-        /* init data */
-        PROVIDE_HIDDEN (__init_array_start = .);
-        KEEP(*(SORT(.init_array.*)))
-        KEEP(*(.init_array))
-        PROVIDE_HIDDEN (__init_array_end = .);
-
-        . = ALIGN(4);
-        /* finit data */
-        PROVIDE_HIDDEN (__fini_array_start = .);
-        *(SORT(.fini_array.*))
-        *(.fini_array)
-        PROVIDE_HIDDEN (__fini_array_end = .);
-
         *(.jcr)
         . = ALIGN(4);
-        /* All data end */
-        __data_end__ = .;
     } > RAM AT> FLASH
 
-    .sdboot.prog_info : {
-        /* Align to 4 KB sector boundary. And consume exactly one sector  */
-        . = ALIGN(4096);
-        KEEP(*(.sdboot.prog_info*))
-        . = ALIGN(4096);
-    } > FLASH
-
-    .flash_end : {
-        PROVIDE(__flash_binary_end = .);
-    } > FLASH
-
-    /* save start address at the end of flash so boot2 can find it */
-    .bootloader_start :
-    {
-        LONG(0xe98cc638);
-        LONG(__vector_start)
-    } > FLASH1
+    .tdata : {
+        . = ALIGN(4);
+		*(.tdata .tdata.* .gnu.linkonce.td.*)
+        /* All data end */
+        __tdata_end = .;
+    } > RAM AT> FLASH
+    PROVIDE(__data_end__ = .);
 
     /* __etext is (for backwards compatibility) the name of the .data init source pointer (...) */
     __etext = LOADADDR(.data);
 
-    .uninitialized_data (NOLOAD): {
+    .tbss (NOLOAD) : {
         . = ALIGN(4);
-        *(.uninitialized_data*)
+        __bss_start__ = .;
+        __tls_base = .;
+        *(.tbss .tbss.* .gnu.linkonce.tb.*)
+        *(.tcommon)
+
+        __tls_end = .;
     } > RAM
+
+    .bss (NOLOAD) : {
+        . = ALIGN(4);
+        __tbss_end = .;
+
+        *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.bss*)))
+        *(COMMON)
+        . = ALIGN(4);
+        __bss_end__ = .;
+    } > RAM
+
+    .heap (NOLOAD):
+    {
+        __end__ = .;
+        end = __end__;
+        KEEP(*(.heap*))
+    } > RAM
+    /* historically on GCC sbrk was growing past __HeapLimit to __StackLimit, however
+       to be more compatible, we now set __HeapLimit explicitly to where the end of the heap is */
+    __HeapLimit = ORIGIN(RAM) + LENGTH(RAM);
 
     /* Start and end symbols must be word-aligned */
     .scratch_x : {
@@ -217,23 +222,6 @@ SECTIONS
         __scratch_y_end__ = .;
     } > SCRATCH_Y AT > FLASH
     __scratch_y_source__ = LOADADDR(.scratch_y);
-
-    .bss  : {
-        . = ALIGN(4);
-        __bss_start__ = .;
-        *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.bss*)))
-        *(COMMON)
-        . = ALIGN(4);
-        __bss_end__ = .;
-    } > RAM
-
-    .heap (NOLOAD):
-    {
-        __end__ = .;
-        end = __end__;
-        KEEP(*(.heap*))
-        __HeapLimit = .;
-    } > RAM
 
     /* .stack*_dummy section doesn't contains any symbols. It is only
      * used for linker to calculate size of stack sections, and assign
@@ -253,6 +241,11 @@ SECTIONS
         KEEP(*(.stack*))
     } > SCRATCH_Y
 
+    .flash_end : {
+        KEEP(*(.embedded_end_block*))
+        PROVIDE(__flash_binary_end = .);
+    } > FLASH
+
     /* stack limit is poorly named, but historically is maximum heap ptr */
     __StackLimit = ORIGIN(RAM) + LENGTH(RAM);
     __StackOneTop = ORIGIN(SCRATCH_X) + LENGTH(SCRATCH_X);
@@ -260,6 +253,17 @@ SECTIONS
     __StackOneBottom = __StackOneTop - SIZEOF(.stack1_dummy);
     __StackBottom = __StackTop - SIZEOF(.stack_dummy);
     PROVIDE(__stack = __StackTop);
+
+    /* picolibc and LLVM */
+    PROVIDE (__heap_start = __end__);
+    PROVIDE (__heap_end = __HeapLimit);
+    PROVIDE( __tls_align = MAX(ALIGNOF(.tdata), ALIGNOF(.tbss)) );
+    PROVIDE( __tls_size_align = (__tls_size + __tls_align - 1) & ~(__tls_align - 1));
+    PROVIDE( __arm32_tls_tcb_offset = MAX(8, __tls_align) );
+
+    /* llvm-libc */
+    PROVIDE (_end = __end__);
+    PROVIDE (__llvm_libc_heap_limit = __HeapLimit);
 
     /* Check if data + heap + stack exceeds RAM limit */
     ASSERT(__StackLimit >= __HeapLimit, "region RAM overflowed")

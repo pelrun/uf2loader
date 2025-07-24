@@ -1,0 +1,7 @@
+
+---
+
+If:
+    PathMatch: .*\.h
+Diagnostics:
+    UnusedIncludes: None

@@ -280,9 +280,7 @@ check_return:
     beq vector_into_flash
     bx r0
 vector_into_flash:
-    // bootloader vector table address is stored at the very end of flash
-    ldr r0, =(XIP_BASE + (2*1024*1024) - 4)
-    ldr r0, [r0]
+    ldr r0, =BOOTLOADER_START
     ldr r1, =(PPB_BASE + M0PLUS_VTOR_OFFSET)
     str r0, [r1]
     ldmia r0, {r0, r1}
