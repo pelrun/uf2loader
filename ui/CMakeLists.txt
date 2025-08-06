@@ -8,21 +8,28 @@ add_subdirectory(lib/binary_info_reader)
 # Saves 60k of code!
 target_include_directories(filesystem_fat BEFORE INTERFACE ${CMAKE_CURRENT_LIST_DIR}/fatfs)
 
-add_executable(BOOT2040
+add_executable(ui
   main.c
   uf2.c
   key_event.c
   text_directory_ui.c
 )
 
-target_compile_options(BOOT2040 PRIVATE -mno-unaligned-access)
+if (PICO_BOARD MATCHES "^pico(_w)?$")
+  set_target_properties(ui PROPERTIES OUTPUT_NAME "BOOT2040")
+else ()
+  set_target_properties(ui PROPERTIES OUTPUT_NAME "BOOT2350")
+endif()
 
-pico_set_program_name(BOOT2040 "uf2load")
-pico_set_program_version(BOOT2040 "2.0")
+target_compile_options(ui PRIVATE -mno-unaligned-access)
 
-target_compile_definitions(BOOT2040 PRIVATE VERSION=${PROJECT_VERSION})
+pico_set_program_name(ui "uf2load")
+pico_set_program_description(ui "UI for SD-Boot")
+pico_set_program_version(ui "2.0")
 
-target_link_libraries(BOOT2040
+target_compile_definitions(ui PRIVATE VERSION=${PROJECT_VERSION})
+
+target_link_libraries(ui
   pico_stdlib
   hardware_sync
   hardware_flash
@@ -41,11 +48,11 @@ target_link_libraries(BOOT2040
   pr_binary_info_reader
 )
 
-pico_enable_stdio_usb(BOOT2040 0)
-pico_enable_stdio_uart(BOOT2040 0)
+pico_enable_stdio_usb(ui 0)
+pico_enable_stdio_uart(ui 0)
 
-pico_set_binary_type(BOOT2040 no_flash)
+pico_set_binary_type(ui no_flash)
 
-pico_add_extra_outputs(BOOT2040)
+pico_add_extra_outputs(ui)
 
-target_link_options(BOOT2040 PRIVATE -Wl,--print-memory-usage)
+target_link_options(ui PRIVATE -Wl,--print-memory-usage)

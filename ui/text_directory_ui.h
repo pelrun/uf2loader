@@ -1,6 +1,6 @@
 /*
  * text_directory_ui.h
- * 
+ *
  */
 
 #ifndef TEXT_DIRECTORY_UI_H
@@ -16,11 +16,11 @@
 // Callback type: invoked when the user makes a final selection. The selected path is passed as an argument.
 typedef void (*final_selection_callback_t)(const char *selected_path);
 
-bool text_directory_ui_pre_init(void);
+void text_directory_ui_pre_init(void);
 
 // Initialize the text directory UI. This sets up the SD card filesystem and the display UI.
 // Returns true if initialization succeeded, false otherwise.
-bool text_directory_ui_init(void);
+void text_directory_ui_init(void);
 
 // Run the main event loop for the directory navigation UI. This function polls for key events,
 // updates the selection cursor, and processes directory changes.

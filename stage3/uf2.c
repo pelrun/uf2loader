@@ -3,9 +3,11 @@
 // Copyright (c) 2024 muzkr
 // Modified for SD boot by pelrun 2025
 
+#include <pico/bootrom.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdalign.h>
 
 #include "boot/uf2.h"
 #include "hardware/regs/addressmap.h"
@@ -26,18 +28,21 @@ typedef struct
   uint32_t num_blks_written;
 } prog_state_t;
 
-static uint8_t _block_buf[sizeof(struct uf2_block)];
+static alignas(256) struct uf2_block _block_buf;
+static alignas(4) prog_state_t s;
 
 static bool check_generic_block(const struct uf2_block* b);
 static bool check_1st_block(const struct uf2_block* b);
 static bool check_block(const prog_state_t* s, const struct uf2_block* b);
 
+#ifdef PICO_RP2040
 extern void *__logical_binary_start;
+#elif PICO_RP2350
+extern uintptr_t app_start_offset;
+#endif
 
 bool load_application_from_uf2(const char* filename)
 {
-  uint8_t* buf = _block_buf;
-
   unsigned int bytes_received;
   FRESULT fr;
 
@@ -47,13 +52,11 @@ bool load_application_from_uf2(const char* filename)
     return false;
   }
 
-  prog_state_t s = {0};
-
-  struct uf2_block* b = (struct uf2_block*)buf;
+  struct uf2_block* b = &_block_buf;
 
   char status[80] = "";
 
-  while (fr = pf_read(buf, sizeof(struct uf2_block), &bytes_received), fr == FR_OK)
+  while (fr = pf_read(b, sizeof(struct uf2_block), &bytes_received), fr == FR_OK)
   {
     if (bytes_received != sizeof(struct uf2_block))
     {
@@ -70,13 +73,6 @@ bool load_application_from_uf2(const char* filename)
       {
         continue;
       }
-
-#if PICO_RP2040
-      if (b->target_addr == 0x20000100)
-      {
-        bl_proginfo_set(b->data + 0x10, (uintptr_t)&__logical_binary_start, "");
-      }
-#endif
 
       memcpy((void*)b->target_addr, b->data, b->payload_size);
 
@@ -117,6 +113,13 @@ bool load_application_from_uf2(const char* filename)
     DEBUG_PRINT("Incomplete flash?\n");
     return false;
   }
+
+#if PICO_RP2040
+  bl_info_set_flash_end(&__logical_binary_start);
+#elif PICO_RP2350
+  // Should we even bother? UI queries the partition info anyway
+  bl_info_set_flash_end((void*)XIP_BASE + PICO_FLASH_SIZE_BYTES - app_start_offset); // 0x103fe000
+#endif
 
   return true;
 }

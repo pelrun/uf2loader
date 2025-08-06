@@ -1,52 +1,34 @@
 
-_flash_base = 0x10000000;
-_flash_size = 2m;
-
-_btstack_flash_size = 8k;
 _bootloader_app_size = 8k;
-_bootloader_ram_size = 4k;
-
+_bootloader_ram_size = 8k;
 
 MEMORY
 {
-    BOOT2(rx) : ORIGIN = _flash_base, LENGTH = 256
-    FLASH(rx) : ORIGIN = (_flash_base + _flash_size) - _bootloader_app_size - _btstack_flash_size, LENGTH = _bootloader_app_size
-    RAM(rwx) : ORIGIN =  0x20040000-_bootloader_ram_size, LENGTH = _bootloader_ram_size
-    SCRATCH_X(rwx) : ORIGIN = 0x20040000, LENGTH = 4k
-    SCRATCH_Y(rwx) : ORIGIN = 0x20041000, LENGTH = 4k
+    FLASH(rx) : ORIGIN = 0x10000000, LENGTH = _bootloader_app_size
+    RAM(rwx) : ORIGIN =  0x20080000-_bootloader_ram_size, LENGTH = _bootloader_ram_size
+    SCRATCH_X(rwx) : ORIGIN = 0x20080000, LENGTH = 4k
+    SCRATCH_Y(rwx) : ORIGIN = 0x20081000, LENGTH = 4k
 }
 
 ENTRY(_entry_point)
 
 SECTIONS
 {
-    /* Second stage bootloader is prepended to the image. It must be 256 bytes big
-       and checksummed. It is usually built by the boot_stage2 target
-       in the Raspberry Pi Pico SDK
-    */
-
     .flash_begin : {
         __flash_binary_start = .;
-    } > BOOT2
+    } > FLASH
 
-    .boot2 : {
-        __boot2_start__ = .;
-        KEEP (*(.boot2))
-        __boot2_end__ = .;
-    } > BOOT2
+    /* The bootrom will enter the image at the point indicated in your
+       IMAGE_DEF, which is usually the reset handler of your vector table.
 
-    ASSERT(__boot2_end__ - __boot2_start__ == 256,
-        "ERROR: Pico second stage bootloader must be 256 bytes in size")
-
-    /* The second stage will always enter the image at the start of .text.
        The debugger will use the ELF entry point, which is the _entry_point
-       symbol if present, otherwise defaults to start of .text.
-       This can be used to transfer control back to the bootrom on debugger
-       launches only, to perform proper flash setup.
+       symbol, and in our case is *different from the bootrom's entry point.*
+       This is used to go back through the bootrom on debugger launches only,
+       to perform the same initial flash setup that would be performed on a
+       cold boot.
     */
 
     .text : {
-        __vector_start = .;
         __logical_binary_start = .;
         KEEP (*(.vectors))
         KEEP (*(.binary_info_header))
@@ -58,6 +40,7 @@ SECTIONS
         /* bit of a hack right now to exclude all floating point and time critical (e.g. memset, memcpy) code from
          * FLASH ... we will include any thing excluded here in .data below by default */
         *(.init)
+        *libgcc.a:cmse_nonsecure_call.o
         *(EXCLUDE_FILE(*libgcc.a: *libc.a:*lib_a-mem*.o *libm.a:) .text*)
         *(.fini)
         /* Pull all c'tors into .text */
@@ -98,8 +81,30 @@ SECTIONS
         . = ALIGN(4);
     } > FLASH
 
+    /* Note the boot2 section is optional, and should be discarded if there is
+       no reference to it *inside* the binary, as it is not called by the
+       bootrom. (The bootrom performs a simple best-effort XIP setup and
+       leaves it to the binary to do anything more sophisticated.) However
+       there is still a size limit of 256 bytes, to ensure the boot2 can be
+       stored in boot RAM.
+
+       Really this is a "XIP setup function" -- the name boot2 is historic and
+       refers to its dual-purpose on RP2040, where it also handled vectoring
+       from the bootrom into the user image.
+    */
+
+    .boot2 : {
+        __boot2_start__ = .;
+        *(.boot2)
+        __boot2_end__ = .;
+    } > FLASH
+
+    ASSERT(__boot2_end__ - __boot2_start__ <= 256,
+        "ERROR: Pico second stage bootloader must be no more than 256 bytes in size")
+
     .rodata : {
         *(EXCLUDE_FILE(*libgcc.a: *libc.a:*lib_a-mem*.o *libm.a:) .rodata*)
+        *(.srodata*)
         . = ALIGN(4);
         *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.flashdata*)))
         . = ALIGN(4);
@@ -150,6 +155,7 @@ SECTIONS
         . = ALIGN(4);
 
         *(.data*)
+        *(.sdata*)
 
         . = ALIGN(4);
         *(.after_data.*)
@@ -160,7 +166,6 @@ SECTIONS
         KEEP(*(.mutex_array))
         PROVIDE_HIDDEN (__mutex_array_end = .);
 
-        . = ALIGN(4);
         *(.jcr)
         . = ALIGN(4);
     } > RAM AT> FLASH
@@ -192,6 +197,8 @@ SECTIONS
 
         *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.bss*)))
         *(COMMON)
+        PROVIDE(__global_pointer$ = . + 2K);
+        *(.sbss*)
         . = ALIGN(4);
         __bss_end__ = .;
     } > RAM
@@ -244,7 +251,7 @@ SECTIONS
     .flash_end : {
         KEEP(*(.embedded_end_block*))
         PROVIDE(__flash_binary_end = .);
-    } > FLASH
+    } > FLASH =0xaa
 
     /* stack limit is poorly named, but historically is maximum heap ptr */
     __StackLimit = ORIGIN(RAM) + LENGTH(RAM);
@@ -268,7 +275,9 @@ SECTIONS
     /* Check if data + heap + stack exceeds RAM limit */
     ASSERT(__StackLimit >= __HeapLimit, "region RAM overflowed")
 
-    ASSERT( __binary_info_header_end - __logical_binary_start <= 256, "Binary info must be in first 256 bytes of the binary")
+    ASSERT( __binary_info_header_end - __logical_binary_start <= 1024, "Binary info must be in first 1024 bytes of the binary")
+    ASSERT( __embedded_block_end - __logical_binary_start <= 4096, "Embedded block must be in first 4096 bytes of the binary")
+
     /* todo assert on extra code */
 }
 

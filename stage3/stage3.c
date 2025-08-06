@@ -2,6 +2,7 @@
 #include <pico/time.h>
 #include "pico/bootrom.h"
 #include "boot/picobin.h"
+#include "hardware/flash.h"
 
 #include "i2ckbd.h"
 #include "proginfo.h"
@@ -66,47 +67,18 @@ void launch_application_from_ram(void)
 
 #define LOADER "BOOT2350.UF2"
 
-uint32_t app_start_addr = 0, app_size = 0;
-
 uint8_t __attribute__((aligned(4))) workarea[4 * 1024];
 
-bool get_app_partition_info(void)
+uintptr_t app_start_offset = 0;
+uint32_t app_size          = 0;
+
+void launch_application(void)
 {
-  if (rom_load_partition_table(workarea, sizeof(workarea), false) != BOOTROM_OK)
-  {
-    return false;
-  }
-
-  uint32_t partition_info[3];
-
-  if (rom_get_partition_table_info(
-          partition_info, 3,
-          PT_INFO_PARTITION_LOCATION_AND_FLAGS | PT_INFO_SINGLE_PARTITION | (0 << 24)) < 0)
-  {
-    return false;
-  }
-
-  uint16_t first_sector_number =
-      (partition_info[1] & PICOBIN_PARTITION_LOCATION_FIRST_SECTOR_BITS) >>
-      PICOBIN_PARTITION_LOCATION_FIRST_SECTOR_LSB;
-  uint16_t last_sector_number = (partition_info[1] & PICOBIN_PARTITION_LOCATION_LAST_SECTOR_BITS) >>
-                                PICOBIN_PARTITION_LOCATION_LAST_SECTOR_LSB;
-  uint32_t app_end_addr = (last_sector_number + 1) * 0x1000;
-
-  app_start_addr = first_sector_number * 0x1000;
-  app_size       = app_end_addr - app_start_addr;
-
-  return true;
-}
-
-int launch_application(void)
-{
-  if (get_app_partition_info())
   {
 #if ENABLE_DEBUG
     stdio_deinit_all();
 #endif
-    rom_chain_image(workarea, sizeof(workarea), (XIP_BASE + app_start_addr), app_size);
+    rom_chain_image(workarea, sizeof(workarea), (XIP_BASE + app_start_offset), app_size);
   }
 }
 
@@ -126,6 +98,9 @@ enum bootmode_e
 
 enum bootmode_e read_bootmode()
 {
+  // TODO: if keyboard isn't available, return BOOT_UPDATE
+  // so we can just do bootsel without having to turn the picocalc on
+
   init_i2c_kbd();
 
   int key = read_i2c_kbd();
@@ -153,9 +128,17 @@ int main()
   stdio_init_all();
 #endif
 
-  // FIXME: check SD card insert?
+// FIXME: check SD card insert?
 
   enum bootmode_e mode = read_bootmode();
+
+#if PICO_RP2350
+  if (!bl_app_partition_get_info(workarea, sizeof(workarea), &app_start_offset, &app_size))
+  {
+    // Can't function without a partition table, so force drop into BOOTSEL
+    mode = BOOT_UPDATE;
+  }
+#endif
 
   if (mode == BOOT_UPDATE)
   {

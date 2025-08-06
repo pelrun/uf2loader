@@ -1,5 +1,5 @@
 /**
- * PicoCalc SD Firmware Loader
+ * PicoCalc UF2 Firmware Loader
  *
  * Originally by : Hsuan Han Lai
  * Email: hsuan.han.lai@gmail.com
@@ -17,8 +17,6 @@
 #include <string.h>
 #include <errno.h>
 
-#include "pico/bootrom.h"
-#include "boot/picobin.h"
 #include "hardware/gpio.h"
 #include "debug.h"
 #include "lcdspi.h"
@@ -34,23 +32,7 @@
 
 #include "proginfo.h"
 #include "uf2.h"
-
-#ifdef __clang__
-// make this a no-op in the IDE only
-#error This should not be compiled!
-#undef __not_in_flash_func
-#define __not_in_flash_func(x) x
-#endif
-
-// Vector and RAM offset
-#if PICO_RP2040
-#define VTOR_OFFSET M0PLUS_VTOR_OFFSET
-#define MAX_RAM 0x20040000
-#elif PICO_RP2350
-#define VTOR_OFFSET M33_VTOR_OFFSET
-#define MAX_RAM 0x20080000
-uint8_t __attribute__((aligned(4))) workarea[4 * 1024];
-#endif
+#include "ui.h"
 
 #define DEBOUNCE_LIMIT 50
 
@@ -87,26 +69,11 @@ bool sd_card_inserted(void)
 blockdevice_t *sd = NULL;
 filesystem_t *fat = NULL;
 
-bool fs_init(void)
-{
-  DEBUG_PRINT("fs init SD\n");
-  sd = blockdevice_sd_create(spi0, SD_MOSI_PIN, SD_MISO_PIN, SD_SCLK_PIN, SD_CS_PIN,
-                                            125000000 / 2 / 4,  // 15.6MHz
-                                            true);
-  fat = filesystem_fat_create();
-  int err = fs_mount("/", fat, sd);
-  if (err == -1)
-  {
-    DEBUG_PRINT("mount err: %s\n", strerror(errno));
-    return false;
-  }
-  return true;
-}
-
 void fs_deinit(void)
 {
   fs_unmount("/");
-  if (fat) {
+  if (fat)
+  {
     filesystem_fat_free(fat);
     fat = NULL;
   }
@@ -117,78 +84,24 @@ void fs_deinit(void)
   }
 }
 
-#if PICO_RP2040
-
-// This function jumps to the application entry point
-// It must update the vector table and stack pointer before jumping
-void launch_application_from(uint32_t *app_location)
+bool fs_init(void)
 {
-  // https://vanhunteradams.com/Pico/Bootloader/Bootloader.html
-  uint32_t *new_vector_table = app_location;
-  volatile uint32_t *vtor = (uint32_t *)(PPB_BASE + VTOR_OFFSET);
-  *vtor = (uint32_t)new_vector_table;
-  asm volatile(
-      "msr msp, %0\n"
-      "bx %1\n"
-      :
-      : "r"(new_vector_table[0]), "r"(new_vector_table[1])
-      :);
-}
-
-int launch_application(void)
-{
-  if (bl_proginfo_valid())
+  DEBUG_PRINT("fs init SD\n");
+  sd = blockdevice_sd_create(spi0, SD_MOSI_PIN, SD_MISO_PIN, SD_SCLK_PIN, SD_CS_PIN,
+                             125000000 / 2 / 4,  // 15.6MHz
+                             true);
+  fat = filesystem_fat_create();
+  int err = fs_mount("/", fat, sd);
+  if (err == -1)
   {
-    stdio_deinit_all();
-    launch_application_from((void *)XIP_BASE + 0x100);
-  }
-}
-
-#elif PICO_RP2350
-
-uint32_t app_start_addr = 0, app_size = 0;
-
-bool get_app_partition_info(void)
-{
-  if (rom_load_partition_table(workarea, sizeof(workarea), false) != BOOTROM_OK)
-  {
+    DEBUG_PRINT("mount err: %s\n", strerror(errno));
+    fs_deinit();
     return false;
   }
-
-  uint32_t partition_info[3];
-
-  if (rom_get_partition_table_info(
-          partition_info, 3,
-          PT_INFO_PARTITION_LOCATION_AND_FLAGS | PT_INFO_SINGLE_PARTITION | (0 << 24)) < 0)
-  {
-    return false;
-  }
-
-  uint16_t first_sector_number =
-      (partition_info[1] & PICOBIN_PARTITION_LOCATION_FIRST_SECTOR_BITS) >>
-      PICOBIN_PARTITION_LOCATION_FIRST_SECTOR_LSB;
-  uint16_t last_sector_number = (partition_info[1] & PICOBIN_PARTITION_LOCATION_LAST_SECTOR_BITS) >>
-                                PICOBIN_PARTITION_LOCATION_LAST_SECTOR_LSB;
-  uint32_t app_end_addr = (last_sector_number + 1) * 0x1000;
-
-  app_start_addr = first_sector_number * 0x1000;
-  app_size = app_end_addr - app_start_addr;
-
   return true;
 }
 
-int launch_application(void)
-{
-  if (bl_proginfo_valid() && get_app_partition_info())
-  {
-    stdio_deinit_all();
-    rom_chain_image(workarea, sizeof(workarea), (XIP_BASE + app_start_addr), app_size);
-  }
-}
-
-#endif
-
-int load_firmware_by_path(const char *path)
+void load_firmware_by_path(const char *path)
 {
   text_directory_ui_set_status("Loading app...");
 
@@ -201,7 +114,6 @@ int load_firmware_by_path(const char *path)
     DEBUG_PRINT("launching app\n");
     // Small delay to allow printf to complete
     sleep_ms(100);
-    launch_application();
   }
   else
   {
@@ -209,10 +121,11 @@ int load_firmware_by_path(const char *path)
     DEBUG_PRINT("no valid app, halting\n");
 
     sleep_ms(2000);
-
-    // Trigger a watchdog reboot
-    watchdog_reboot(0, 0, 0);
   }
+
+  // Trigger a watchdog reboot
+  // stage3 will handle launching the app if possible
+  watchdog_reboot(0, 0, 0);
 }
 
 void final_selection_callback(const char *path)
@@ -222,9 +135,8 @@ void final_selection_callback(const char *path)
 
   if (path == NULL)
   {
-    // Run current app
-    launch_application();
-    return;
+    // Reboot into current app
+    watchdog_reboot(0, 0, 0);
   }
 
   // Trigger firmware loading with the selected path
@@ -263,9 +175,22 @@ int main()
   gpio_pull_up(SD_DET_PIN);  // Enable pull-up resistor
   gpio_set_inover(SD_DET_PIN, GPIO_OVERRIDE_INVERT);
 
+#if PICO_RP2350
+  {
+    uint8_t __attribute__((aligned(4))) workarea[4 * 1024];
+    uintptr_t app_start_offset = 0;
+    uint32_t app_size = 0;
+
+    if (!bl_app_partition_get_info(workarea, sizeof(workarea), &app_start_offset, &app_size))
+    {
+      return false;
+    }
+    // After this 0x10000000 should be remapped to the start of the app partition
+    bl_remap_flash(app_start_offset);
+  }
+#endif
+
   lcd_init();
-  lcd_clear();
-  //text_directory_ui_pre_init();
 
   // Initialize filesystem
   if (!fs_init())

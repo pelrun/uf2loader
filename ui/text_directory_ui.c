@@ -1,7 +1,7 @@
 /**
- * PicoCalc SD Firmware Loader
+ * PicoCalc UF2 Loader
  *
- * Author: Hsuan Han Lai
+ * Originally by : Hsuan Han Lai
  * Email: hsuan.han.lai@gmail.com
  * Website: https://hsuanhanlai.com
  * Year: 2025
@@ -26,7 +26,6 @@
 #include <string.h>
 #include <hardware/watchdog.h>
 #include "binary_info_reader.h"
-#include "pico/stdlib.h"
 #include "lcdspi.h"
 #include "key_event.h"
 #include "text_directory_ui.h"
@@ -36,10 +35,7 @@
 
 #include "proginfo.h"
 
-// External functions for SD card handling
-extern bool sd_card_inserted(void);
-extern bool fs_init(void);
-extern void fs_deinit(void);
+#include "ui.h"
 
 // UI Layout Constants
 #define UI_WIDTH 280
@@ -84,8 +80,14 @@ typedef struct
 #define FILE_NAME_VISIBLE_CHARS (FILE_NAME_AREA_WIDTH / CHAR_WIDTH)
 #define SCROLL_DELAY_MS 300
 
+#if PICO_RP2040
+#define FW_PATH "/pico1-apps"
+#elif PICO_RP2350
+#define FW_PATH "/pico2-apps"
+#endif
+
 // Global variables for UI state
-static char current_path[512] = "/firmware";  // Current directory path
+static char current_path[512] = FW_PATH;  // Current directory path
 static dir_entry_t entries[MAX_ENTRIES];      // Directory entries
 static int entry_count = 0;                   // Number of entries in the current directory
 static uint8_t selected_index = 0;            // Currently selected entry index
@@ -94,7 +96,6 @@ static uint8_t last_selected_index = 0;
 static uint8_t last_page_index = 0;
 static uint8_t update_sel = 0;
 static uint8_t update_required = 0;
-extern uint8_t sd_insert_state;
 static uint32_t status_repeat = 0;
 static char status_message[256] = "";                     // Status message
 static final_selection_callback_t final_callback = NULL;  // Callback for file selection
@@ -156,20 +157,19 @@ static void set_default_entry()
 {
   entry_count = 0;
 
-  if (!bl_proginfo_valid())
-  {
-    strlcpy(entries[entry_count].name, "[No App]", sizeof(entries[entry_count].name));
-  }
-  else
-  {
-    const char *filename = pr_binary_info_program_name();
+  const char *filename = pr_binary_info_program_name();
 
-    if (!filename)
-    {
-      filename = bl_proginfo_filename();
-    }
-    snprintf(entries[entry_count].name, sizeof(entries[entry_count].name), "[%s]", filename);
+  if (!filename)
+  {
+    filename = bl_proginfo_filename();
   }
+
+  if (!filename)
+  {
+    filename = "Current App";
+  }
+
+  snprintf(entries[entry_count].name, sizeof(entries[entry_count].name), "[%s]", filename);
 
   entries[entry_count].type = ENTRY_IS_LAST_APP;
   entries[entry_count].file_size = 0;
@@ -183,7 +183,8 @@ static void get_scrolling_text(const char *text, char *out, size_t out_size, int
 {
   char scroll_buffer[512];
   snprintf(scroll_buffer, sizeof(scroll_buffer), "%s   %s", text, text);
-  int scroll_len = strlen(scroll_buffer);
+
+  int scroll_len = strlen(text)+3;
   uint32_t time_ms = (time_us_64() / 1000) - last_scrolling;
   int offset = (time_ms / SCROLL_DELAY_MS) % scroll_len;
 
@@ -282,9 +283,9 @@ static void ui_draw_empty_tip()
   // draw_rect_spi(UI_X, UI_Y + HEADER_TITLE_HEIGHT+1, UI_X + UI_WIDTH - 1, UI_Y + UI_HEIGHT - 2,
   // COLOR_BG);
 
-  draw_text(UI_X + 2, y + 2, "No .uf2 files in \"firmware\" folder", COLOR_FG, COLOR_BG);
+  draw_text(UI_X + 2, y + 2, "No .uf2 files in folder", COLOR_FG, COLOR_BG);
   draw_text(UI_X + 2, y + 12 + 2, "Please copy .uf2 files to the", COLOR_FG, COLOR_BG);
-  draw_text(UI_X + 2, y + 24 + 2, "\"firmware\" folder", COLOR_FG, COLOR_BG);
+  draw_text(UI_X + 2, y + 24 + 2, FW_PATH " folder", COLOR_FG, COLOR_BG);
 
   set_default_entry();
   // Draw the entry using the helper function
@@ -579,11 +580,11 @@ void process_key_event(int key)
       }
       break;
     case KEY_BACKSPACE:
-      if (strcmp(current_path, "/firmware") != 0)
+      if (strcmp(current_path, FW_PATH) != 0)
       {
         char *last_slash = strrchr(current_path, '/');
         if (last_slash) *last_slash = '\0';
-        if (current_path[0] == '\0') strlcpy(current_path, "/firmware", sizeof(current_path));
+        if (current_path[0] == '\0') strlcpy(current_path, FW_PATH, sizeof(current_path));
         load_directory(current_path);
         ui_draw_path_header(0);
         ui_draw_directory_list();
@@ -601,7 +602,7 @@ void text_directory_ui_set_final_callback(final_selection_callback_t callback)
   final_callback = callback;
 }
 
-bool text_directory_ui_pre_init(void)
+void text_directory_ui_pre_init(void)
 {
   draw_filled_rect(UI_X, UI_Y, UI_WIDTH, UI_HEIGHT, COLOR_BG);
   ui_draw_title();
@@ -611,12 +612,12 @@ bool text_directory_ui_pre_init(void)
 }
 
 // Public API: Initialize the UI
-bool text_directory_ui_init(void)
+void text_directory_ui_init(void)
 {
   update_sel = 0;
   update_required = 1;
   draw_filled_rect(UI_X, UI_Y, UI_WIDTH, UI_HEIGHT, COLOR_BG);
-  strlcpy(current_path, "/firmware", sizeof(current_path));
+  strlcpy(current_path, FW_PATH, sizeof(current_path));
   load_directory(current_path);
   if (sd_insert_state)
   {
@@ -629,7 +630,6 @@ bool text_directory_ui_init(void)
   }
   ui_refresh();
   last_scrolling = time_us_64() / 1000;
-  return true;
 }
 
 // Public API: Set a status message

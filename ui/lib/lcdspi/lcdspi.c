@@ -149,7 +149,7 @@ void read_buffer_spi(int x1, int y1, int x2, int y2, unsigned char *p) {
 void draw_buffer_spi(int x1, int y1, int x2, int y2, unsigned char *p) {
     int i, t;
     unsigned char q[3];
-    
+
     // Boundary checking
     if (x2 <= x1) {
         t = x1;
@@ -169,26 +169,26 @@ void draw_buffer_spi(int x1, int y1, int x2, int y2, unsigned char *p) {
     if (y1 >= vres) y1 = vres - 1;
     if (y2 < 0) y2 = 0;
     if (y2 >= vres) y2 = vres - 1;
-    
+
     // Calculate total number of pixels
     int pixelCount = (x2 - x1 + 1) * (y2 - y1 + 1);
     uint16_t *pixelBuffer = (uint16_t *)p;
-    
+
     define_region_spi(x1, y1, x2, y2, 1);
-    
+
     for (i = 0; i < pixelCount; i++) {
         uint16_t pixel = pixelBuffer[i];
-        
+
         // Extract RGB565 components
         uint8_t r5 = (pixel >> 11) & 0x1F;
         uint8_t g6 = (pixel >> 5) & 0x3F;
         uint8_t b5 = pixel & 0x1F;
-        
+
         // Convert to 8-bit values (scaling approximation)
         uint8_t r8 = (r5 << 3) | (r5 >> 2);
         uint8_t g8 = (g6 << 2) | (g6 >> 4);
         uint8_t b8 = (b5 << 3) | (b5 >> 2);
-        
+
 #ifdef ILI9488
         // Convert each RGB565 pixel to RGB888 (3 bytes per pixel) for ILI9488
         uint8_t rgb[3];
@@ -201,7 +201,7 @@ void draw_buffer_spi(int x1, int y1, int x2, int y2, unsigned char *p) {
         hw_send_spi(q, 2);
 #endif
     }
-    
+
     lcd_spi_raise_cs();
 }
 
@@ -670,6 +670,8 @@ void pico_lcd_init() {
 
     spi_write_command(TFT_SLPOUT); //Exit Sleep
     sleep_ms(120);
+
+    lcd_clear();
 
     spi_write_command(TFT_DISPON); //Display on
     sleep_ms(120);
