@@ -28,6 +28,7 @@ The compiled binaries will be placed in the `output/` folder.
 ## Installation
 
 Copy `BOOT2040.UF2` (for Pico/Pico W) or `BOOT2350.UF2` (for Pico 2/2W) to the root of the Picocalc SD card. This is the menu UI and is loaded by the bootloader when needed.
+
 Create `pico1-apps` (for Pico/Pico W) or `pico2-apps` (for Pico 2/2W) folders on the SD card and copy any UF2 files you want to use to them.
 
 Pico 1 and Pico 2 files can coexist on the SD card simultaneously.
@@ -51,7 +52,7 @@ On the RP2040, the top 16k of flash is occupied and must not be overwritten by t
 
 As the RP2040 does not have a mechanism for write protecting flash regions, the application has to manually avoid flashing this area, and so the bootloader stores some information in the application vector table for use by the developer to know how much free flash space is available in place of the `PICO_FLASH_SIZE_BYTES` macro.
 
-If the magic number (`0xe98cc638`) is present at XIP_BASE+0x110, then the word at XIP_BASE+0x114 is the size of the safe flash area. The application is free to erase or reflash any addresses below this without affecting the bootloader.
+If the magic number (`0xe98cc638`) is present at `XIP_BASE+0x110`, then the word at `XIP_BASE+0x114` is the size of the safe flash area. The application is free to erase or reflash any addresses below this without affecting the bootloader.
 
 On the RP2350, a flash partition is used, and the application can't directly overwrite (or even see) the bootloader in the normal case (please use RP2350's `rom_flash_op` instead of the old `flash_range_erase/flash_range_program` apis.) The application can get the size of the partition via the bootrom API. (see `bl_app_partition_get_info()` in proginfo.c for an implementation.)
 
@@ -67,4 +68,4 @@ On the RP2350, a flash partition is used, and the application can't directly ove
 - [Elm-ChaN](https://elm-chan.org/): because everyone uses their FatFS and Petit FatFS libraries. E. v. e. r. y. o. n. e.
 
 ## Read More
-- Forum Page and Discussion: [Clockwork Pi Forum](https://forum.clockworkpi.com/t/i-made-an-app-that-dynamically-load-firmware-from-sd-card/16664/24)
+- Forum Page and Discussion: [Clockwork Pi Forum](https://forum.clockworkpi.com/t/uf2-loader-release/18479)
