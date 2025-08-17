@@ -34,6 +34,7 @@ typedef struct
   uint32_t num_blks;
   uint32_t num_blks_read;
   uint32_t num_blks_written;
+  bool malformed_uf2; // indicates a badly formed pico2 uf2
 } prog_state_t;
 
 static struct uf2_block _block_buf __attribute((aligned(256)));
@@ -94,7 +95,7 @@ bool family_valid(uint32_t family_id) { return family_id == RP2040_FAMILY_ID; }
 
 bool family_valid(uint32_t family_id)
 {
-  return family_id == RP2350_ARM_NS_FAMILY_ID || family_id == RP2350_ARM_S_FAMILY_ID;
+  return family_id == RP2350_ARM_NS_FAMILY_ID || family_id == RP2350_ARM_S_FAMILY_ID || family_id == RP2350_RISCV_FAMILY_ID;
 }
 
 #ifndef DRY_RUN
@@ -179,6 +180,7 @@ bool __attribute__((optimize("-O0"))) load_application_from_uf2(const char* file
     else
     {
       // The 1st block
+      s.num_blks = b->num_blocks - (s.malformed_uf2?1:0);
 
       if (!check_1st_block(b))
       {
@@ -187,7 +189,7 @@ bool __attribute__((optimize("-O0"))) load_application_from_uf2(const char* file
 
       if (!handle_boot_stage2(b))
       {
-        if (FLASH_ERASE(b->target_addr, b->num_blocks * b->payload_size) < 0)
+        if (FLASH_ERASE(b->target_addr, s.num_blks * b->payload_size) < 0)
         {
           // Don't even attempt to program if the erase fails
           return false;
@@ -197,7 +199,6 @@ bool __attribute__((optimize("-O0"))) load_application_from_uf2(const char* file
       }
 
       s.prog_addr = b->target_addr;
-      s.num_blks = b->num_blocks;
       s.num_blks_written++;
     }
   }
@@ -268,12 +269,18 @@ static bool check_generic_block(const struct uf2_block* b)
 
   // *yes* b->file_size is actually family_id when the UF2_FLAG_FAMILY_ID_PRESENT flag is set
 
-  // TODO: should we even be accepting ABSOLUTE_FAMILY_ID?
   if (b->flags & UF2_FLAG_FAMILY_ID_PRESENT && b->file_size == ABSOLUTE_FAMILY_ID &&
-      b->block_no == 0 && b->num_blocks == 2 && b->target_addr == 0x10FFFF00)
+      b->block_no == 0 && b->target_addr == 0x10FFFF00)
   {
     // Skip RP2350-E10 workaround block
     DEBUG_PRINT("Skip RP2350-E10 dummy block\n");
+
+    if (b->num_blocks != 2)
+    {
+      // need to deal with a malformed uf2
+      s.malformed_uf2 = true;
+    }
+
     return false;
   }
 
@@ -299,13 +306,13 @@ static bool check_1st_block(const struct uf2_block* b)
     return false;
   }
 
-  if (b->block_no != 0)
+  if (b->block_no != (s.malformed_uf2?1:0))
   {
     DEBUG_PRINT("First block is missing\n");
     return false;
   }
 
-  if (b->target_addr + FLASH_PAGE_SIZE * b->num_blocks > prog_area_end)
+  if (b->target_addr + FLASH_PAGE_SIZE * s.num_blks > prog_area_end)
   {
     DEBUG_PRINT("Requested range exceeds flash area\n");
     return false;
@@ -321,11 +328,11 @@ static bool check_block(const prog_state_t* s, const struct uf2_block* b)
     return false;
   }
 
-  if (s->num_blks != b->num_blocks)
+  if (s->num_blks != b->num_blocks - (s->malformed_uf2?1:0))
   {
     return false;
   }
-  if (s->num_blks_written != b->block_no)
+  if (s->num_blks_written != b->block_no - (s->malformed_uf2?1:0))
   {
     return false;
   }
