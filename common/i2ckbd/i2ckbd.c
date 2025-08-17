@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <pico/stdio.h>
 #include "i2ckbd.h"
 #include "debug.h"

@@ -67,19 +67,15 @@ void launch_application_from_ram(void)
 
 #define LOADER "BOOT2350.UF2"
 
-uint8_t __attribute__((aligned(4))) workarea[4 * 1024];
+uint8_t __attribute__((aligned(1024))) workarea[4 * 1024];
 
 uintptr_t app_start_offset = 0;
 uint32_t app_size          = 0;
 
 void launch_application(void)
 {
-  {
-#if ENABLE_DEBUG
-    stdio_deinit_all();
-#endif
-    rom_chain_image(workarea, sizeof(workarea), (XIP_BASE + app_start_offset), app_size);
-  }
+  stdio_deinit_all();
+  rom_chain_image(workarea, sizeof(workarea), (XIP_BASE + app_start_offset), app_size);
 }
 
 void launch_application_from_ram(void)
@@ -96,6 +92,15 @@ enum bootmode_e
   BOOT_UPDATE,
 };
 
+#define KEY_UP        0xb5
+#define KEY_DOWN      0xb6
+#define KEY_F1 0x81
+#define KEY_F2 0x82
+#define KEY_F3 0x83
+#define KEY_F4 0x84
+#define KEY_F5 0x85
+#define KEY_ENTER       0x0A
+
 enum bootmode_e read_bootmode()
 {
   // TODO: if keyboard isn't available, return BOOT_UPDATE
@@ -103,20 +108,22 @@ enum bootmode_e read_bootmode()
 
   init_i2c_kbd();
 
-  int key = read_i2c_kbd();
-  if (key == 0)
-  {
-    return BOOT_DEFAULT;
-  }
+  int key;
 
-  switch (key)
+  while ((key = read_i2c_kbd()) > 0)
   {
-    case 0xb5:  // Arrow Up
-      return BOOT_SD;
-    case 0xb6:  // Arrow Down
-      return BOOT_UPDATE;
-    default:
-      break;
+    switch (key)
+    {
+      case KEY_UP:
+      case KEY_F1:
+      case KEY_F5:
+        return BOOT_SD;
+      case KEY_DOWN:
+      case KEY_F3:
+        return BOOT_UPDATE;
+      default:
+        break;
+    }
   }
 
   return BOOT_DEFAULT;
@@ -128,7 +135,7 @@ int main()
   stdio_init_all();
 #endif
 
-// FIXME: check SD card insert?
+  // FIXME: check SD card insert?
 
   enum bootmode_e mode = read_bootmode();
 
@@ -182,10 +189,7 @@ int main()
     }
   }
 
-  // fall back to application
-  DEBUG_PRINT("Failed to run UI, boot flash\n");
-  launch_application();
-
-  // boot failure
-  infinite_loop();
+  // just fall back to bootsel here on failure until LCD is implemented
+  // falling back to the application gave misleading feedback to users
+  reset_usb_boot(0, 0);
 }
