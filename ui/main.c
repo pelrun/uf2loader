@@ -91,8 +91,8 @@ bool fs_init(void)
                              125000000 / 2 / 4,  // 15.6MHz
                              true);
   fat = filesystem_fat_create();
-  int err = fs_mount("/", fat, sd);
-  if (err == -1)
+  int res = fs_mount("/", fat, sd);
+  if (res < 0)
   {
     DEBUG_PRINT("mount err: %s\n", strerror(errno));
     fs_deinit();
@@ -106,26 +106,30 @@ void load_firmware_by_path(const char *path)
   text_directory_ui_set_status("Loading app...");
 
   // Attempt to load the application from the SD card
-  bool load_success = load_application_from_uf2(path);
+  enum uf2_result_e result = load_application_from_uf2(path);
 
-  if (load_success)
+  switch (result)
   {
-    text_directory_ui_set_status("Launching app...");
-    DEBUG_PRINT("launching app\n");
-    // Small delay to allow printf to complete
-    sleep_ms(100);
+    case UF2_LOADED:
+      text_directory_ui_set_status("Launching...");
+      DEBUG_PRINT("launching app\n");
+      sleep_ms(100);
+      // trigger a reboot - stage3 will launch the app
+      watchdog_reboot(0, 0, 0);
+      break;
+    case UF2_WRONG_PLATFORM:
+      text_directory_ui_set_status("ERR: Not for this device");
+      DEBUG_PRINT("wrong platform\n");
+      break;
+    case UF2_BAD:
+      text_directory_ui_set_status("ERR: Bad UF2 file");
+      DEBUG_PRINT("bad uf2\n");
+      break;
+    default:
+      text_directory_ui_set_status("ERR: Unexpected error");
+      DEBUG_PRINT("unexpected error\n");
+      break;
   }
-  else
-  {
-    text_directory_ui_set_status("ERR: No valid app");
-    DEBUG_PRINT("no valid app, halting\n");
-
-    sleep_ms(2000);
-  }
-
-  // Trigger a watchdog reboot
-  // stage3 will handle launching the app if possible
-  watchdog_reboot(0, 0, 0);
 }
 
 void final_selection_callback(const char *path)

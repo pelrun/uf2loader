@@ -34,6 +34,7 @@ typedef struct
   uint32_t num_blks;
   uint32_t num_blks_read;
   uint32_t num_blks_written;
+  uint32_t family_id;
   bool malformed_uf2; // indicates a badly formed pico2 uf2
 } prog_state_t;
 
@@ -43,7 +44,6 @@ static prog_state_t s __attribute((aligned(4)));
 static bool check_generic_block(const struct uf2_block* b);
 static bool check_1st_block(const struct uf2_block* b);
 static bool check_block(const prog_state_t* s, const struct uf2_block* b);
-static bool check_EOT(const prog_state_t* s);
 
 #if PICO_RP2040
 
@@ -130,13 +130,13 @@ bool handle_boot_stage2(const struct uf2_block* b) { return false; }
 
 // FIXME: hardfaults when compiled under -Os!
 // why is gcc producing unaligned reads?
-bool __attribute__((optimize("-O0"))) load_application_from_uf2(const char* filename)
+enum uf2_result_e __attribute__((optimize("-O0"))) load_application_from_uf2(const char* filename)
 {
   prog_area_end = (uintptr_t)bl_info_get_flash_end();
   if (!prog_area_end)
   {
     text_directory_ui_set_status("Invalid bootloader!");
-    return false;
+    return UF2_UNKNOWN;
   }
 
   FILE* fp = fopen(filename, "rb");
@@ -144,7 +144,7 @@ bool __attribute__((optimize("-O0"))) load_application_from_uf2(const char* file
   if (fp == NULL)
   {
     DEBUG_PRINT("open %s fail: %s\n", filename, strerror(errno));
-    return false;
+    return UF2_UNKNOWN;
   }
 
   struct uf2_block* b = &_block_buf;
@@ -187,12 +187,13 @@ bool __attribute__((optimize("-O0"))) load_application_from_uf2(const char* file
         continue;
       }
 
+      text_directory_ui_set_status("Erasing flash...");
       if (!handle_boot_stage2(b))
       {
         if (FLASH_ERASE(b->target_addr, s.num_blks * b->payload_size) < 0)
         {
           // Don't even attempt to program if the erase fails
-          return false;
+          return UF2_UNKNOWN;
         }
 
         FLASH_PROG(b->target_addr, b->data, FLASH_PAGE_SIZE);
@@ -207,17 +208,21 @@ bool __attribute__((optimize("-O0"))) load_application_from_uf2(const char* file
 
   DEBUG_PRINT("Number of blocks parsed: %d\n", s.num_blks_read);
   DEBUG_PRINT("Number of blocks to flash: %d\n", s.num_blks);
-  DEBUG_PRINT("Number of blocks flashed: %d\n", s.num_blks_flashed);
+  DEBUG_PRINT("Number of blocks flashed: %d\n", s.num_blks_written);
 
-  // Empty program file or not for this platform
   if (s.num_blks == 0)
   {
-    return false;
+    return UF2_BAD;
   }
 
-  if (!check_EOT(&s))
+  if (s.num_blks_written == 0)
   {
-    return false;
+    return UF2_WRONG_PLATFORM;
+  }
+
+  if (s.num_blks != s.num_blks_written)
+  {
+    return UF2_BAD;
   }
 
 #if PICO_RP2040
@@ -230,7 +235,7 @@ bool __attribute__((optimize("-O0"))) load_application_from_uf2(const char* file
   FLASH_PROG(bl_proginfo_page(), page_copy, FLASH_PAGE_SIZE);
 #endif
 
-  return true;
+  return UF2_LOADED;
 }
 
 static bool check_generic_block(const struct uf2_block* b)
@@ -287,6 +292,7 @@ static bool check_generic_block(const struct uf2_block* b)
   if (b->flags & UF2_FLAG_FAMILY_ID_PRESENT && !family_valid(b->file_size))
   {
     DEBUG_PRINT("Not for this platform\n");
+    s.family_id = b->file_size;
     return false;
   }
 
@@ -338,17 +344,6 @@ static bool check_block(const prog_state_t* s, const struct uf2_block* b)
   }
   if (s->prog_addr + FLASH_PAGE_SIZE * s->num_blks_written != b->target_addr)
   {
-    return false;
-  }
-
-  return true;
-}
-
-static bool check_EOT(const prog_state_t* s)
-{
-  if (s->num_blks != s->num_blks_written)
-  {
-    DEBUG_PRINT("Not all blocks were flashed?\n");
     return false;
   }
 
