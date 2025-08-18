@@ -90,9 +90,8 @@ typedef struct
 static char current_path[512] = FW_PATH;  // Current directory path
 static dir_entry_t entries[MAX_ENTRIES];      // Directory entries
 static int entry_count = 0;                   // Number of entries in the current directory
-static uint8_t selected_index = 0;            // Currently selected entry index
+static int last_selected_index = 0, selected_index = 0;
 static uint8_t page_index = 0;
-static uint8_t last_selected_index = 0;
 static uint8_t last_page_index = 0;
 static uint8_t update_sel = 0;
 static uint8_t update_required = 0;
@@ -494,7 +493,7 @@ static void ui_refresh(void)
   ui_draw_directory_list();
   if (entry_count == 0)
   {
-    text_directory_ui_set_status("Enter to exec.");
+    text_directory_ui_set_status("Enter to load.");
     ui_draw_empty_tip();
   }
   else
@@ -504,44 +503,35 @@ static void ui_refresh(void)
   text_directory_ui_update_title();
 }
 
+void move_selection(int dir)
+{
+  last_selected_index = selected_index;
+
+  selected_index = (selected_index + dir) % entry_count;
+  if (selected_index < 0)
+  {
+    selected_index += entry_count;
+  }
+
+  update_sel = 1;
+
+  ui_draw_directory_list();
+  if (sd_insert_state)
+  {
+    text_directory_ui_set_status("Up/Down to select, Enter to load.");
+  }
+}
+
 // Handle key events for navigation and selection
 void process_key_event(int key)
 {
   switch (key)
   {
     case KEY_ARROW_UP:
-      last_selected_index = selected_index;
-      if (selected_index == 0)
-      {
-        selected_index = entry_count - 1;
-      }
-      else
-      {
-        selected_index--;
-      }
-      update_sel = 1;
-      ui_draw_directory_list();
-      if (sd_insert_state)
-      {
-        text_directory_ui_set_status("Up/Down to select, Enter to exec.");
-      }
+      move_selection(-1);
       break;
     case KEY_ARROW_DOWN:
-      last_selected_index = selected_index;
-      if (selected_index == entry_count - 1)
-      {
-        selected_index = 0;
-      }
-      else
-      {
-        selected_index++;
-      }
-      update_sel = 1;
-      ui_draw_directory_list();
-      if (sd_insert_state)
-      {
-        text_directory_ui_set_status("Up/Down to select, Enter to exec.");
-      }
+      move_selection(1);
       break;
     case KEY_ENTER:
       if (entry_count == 0)
@@ -621,7 +611,7 @@ void text_directory_ui_init(void)
   load_directory(current_path);
   if (sd_insert_state)
   {
-    text_directory_ui_set_status("Up/Down to select, Enter to exec.");
+    text_directory_ui_set_status("Up/Down to select, Enter to load.");
     status_repeat = 2;
   }
   else
@@ -672,6 +662,8 @@ void ui_bat_update(void)
 
 void ui_sd_card_removed()
 {
+  fs_deinit();
+
   text_directory_ui_set_status("SD card removed. Please reinsert.");
   text_directory_ui_update_header(!sd_insert_state);
   text_directory_ui_update_title();
@@ -691,9 +683,15 @@ void ui_sd_card_removed()
   }
 
   // Once reinserted, update the UI and reinitialize filesystem
-  // FIXME: retry mount a few times
   text_directory_ui_set_status("SD card detected. Remounting...");
-  if (!fs_init())
+  bool mounted = false;
+  for (int retry = 5; retry > 0 && !mounted; retry--)
+  {
+    sleep_ms(500);
+    mounted = fs_init();
+  }
+
+  if (!mounted)
   {
     text_directory_ui_set_status("Failed to remount SD card!");
     sleep_ms(2000);
@@ -703,6 +701,7 @@ void ui_sd_card_removed()
   // Refresh the directory listing
   load_directory(current_path);
   ui_draw_path_header(0);
+  update_required = 1;
   ui_draw_directory_list();
   text_directory_ui_set_status("SD card remounted successfully.");
 }
