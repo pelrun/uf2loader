@@ -56,3 +56,5 @@ build/
 .cache
 .vscode
 output/
+*.uf2
+*.UF2
