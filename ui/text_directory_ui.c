@@ -219,8 +219,9 @@ static void load_directory(const char *path)
   struct dirent *ent;
   while ((ent = readdir(dir)) != NULL && entry_count < MAX_ENTRIES)
   {
-    if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
+    if (ent->d_name[0] == '.') continue;
     if (has_suffix(ent->d_name, ".uf2") == false) continue;
+
     strlcpy(entries[entry_count].name, ent->d_name, sizeof(entries[entry_count].name));
 
     // Build full path for stat
