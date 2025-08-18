@@ -1,6 +1,6 @@
 # UF2 Loader
 
-`UF2 Loader` is a custom bootloader for the PicoCalc . This bootloader provides the functionality to load and execute applications from an SD card, designed to enable PicoCalc to load firmware to the Pico using an SD card easily.
+`UF2 Loader` is a custom bootloader for the RP2040 and RP2350 on the PicoCalc. With UF2 Loader installed, applications can be loaded directly from the SD card at will without needing to plug into a PC.
 
 <div align="center">
     <img src="img/uf2loader.jpg" alt="UF2 Loader" width="80%">
@@ -39,11 +39,13 @@ Flash `bootloader_pico.uf2` (for Pico/Pico W) or `bootloader_pico2.uf2` (Pico 2/
 
 If an application is already present in flash, by default it will be started immediately on power-on.
 
-Hold Up during power-on to launch the loader menu.
+Hold Up, F1 or F5 during power-on to launch the loader menu.
 
 If an application is present, the first item in the menu (in [square brackets]) will launch it. If the application has the appropriate Binary Information block then the name of the application will be shown here.
 
-Hold Down during power-on to put the Pico into BOOTSEL mode.
+Hold Down or F3 during power-on to put the Pico into BOOTSEL mode.
+
+If the menu cannot be loaded for any reason (no SD card, BOOTnnnn.UF2 not found, aliens etc) then the device will fall into BOOTSEL mode.
 
 On the RP2350 only, UF2 files can also be written to the Pico in BOOTSEL mode or via Picotool as normal and will automatically be placed in the app partition.
 
@@ -54,7 +56,7 @@ As the RP2040 does not have a mechanism for write protecting flash regions, the 
 
 If the magic number (`0xe98cc638`) is present at `XIP_BASE+0x110`, then the word at `XIP_BASE+0x114` is the size of the safe flash area. The application is free to erase or reflash any addresses below this without affecting the bootloader.
 
-On the RP2350, a flash partition is used, and the application can't directly overwrite (or even see) the bootloader in the normal case (please use RP2350's `rom_flash_op` instead of the old `flash_range_erase/flash_range_program` apis.) The application can get the size of the partition via the bootrom API. (see `bl_app_partition_get_info()` in proginfo.c for an implementation.)
+On the RP2350, a flash partition is used, and the application can't directly overwrite (or even see) the bootloader in the normal case (please use RP2350's `rom_flash_op` instead of the old `flash_range_erase/flash_range_program` apis, which do not care about the partition table.) The application can get the size of the partition via the bootrom API. (see `bl_app_partition_get_info()` in proginfo.c for an implementation.)
 
 ## Credits
 - [Hiroyuki Oyama](https://github.com/oyama/pico-sdcard-boot): Special thanks for the firmware loader mechanism and VFS file system.
