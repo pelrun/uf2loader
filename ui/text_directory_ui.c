@@ -651,14 +651,16 @@ void text_directory_ui_draw_default_app()
 
 void ui_bat_update(void)
 {
-  static uint32_t last_bat_update = 0;
-  uint32_t current_time = time_us_64() / 1000;
+  static int next_bat_update = 0;
+  int uptime_ms = time_us_64() / 1000;
 
-  if (current_time - last_bat_update > BAT_UPDATE_MS)
+  if (uptime_ms - next_bat_update < 0)
   {
-    text_directory_ui_update_title();
-    last_bat_update = current_time;
+    return;
   }
+
+  next_bat_update = uptime_ms + BAT_UPDATE_MS;
+  ui_draw_battery_status();
 }
 
 void ui_sd_card_removed()
