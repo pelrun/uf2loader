@@ -1,8 +1,8 @@
 #include <pico.h>
 #include <pico/time.h>
-#include "pico/bootrom.h"
-#include "boot/picobin.h"
-#include "hardware/flash.h"
+#include <pico/bootrom.h>
+#include <boot/picobin.h>
+#include <hardware/flash.h>
 
 #include "i2ckbd.h"
 #include "proginfo.h"
@@ -92,14 +92,14 @@ enum bootmode_e
   BOOT_UPDATE,
 };
 
-#define KEY_UP        0xb5
-#define KEY_DOWN      0xb6
+#define KEY_UP 0xb5
+#define KEY_DOWN 0xb6
 #define KEY_F1 0x81
 #define KEY_F2 0x82
 #define KEY_F3 0x83
 #define KEY_F4 0x84
 #define KEY_F5 0x85
-#define KEY_ENTER       0x0A
+#define KEY_ENTER 0x0A
 
 enum bootmode_e read_bootmode()
 {
@@ -109,9 +109,11 @@ enum bootmode_e read_bootmode()
   init_i2c_kbd();
 
   int key;
+  int end_time = time_us_32() + 500000; // 0.5s
 
-  while ((key = read_i2c_kbd()) > 0)
+  while (((int)time_us_32() - end_time) < 0)
   {
+    key = read_i2c_kbd();
     switch (key)
     {
       case KEY_UP:

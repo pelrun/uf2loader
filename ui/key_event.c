@@ -7,14 +7,12 @@
  * Year: 2025
  *
  * key_event.c
- * 
+ *
  * Wrapper for post processing dispatch keyboard events
- * 
+ *
  */
 
 #include "i2ckbd.h"
-#include <stdio.h>
-#include <string.h>
 #include <pico/stdio.h>
 #include "key_event.h"
 #include "debug.h"
@@ -25,15 +23,15 @@ void keypad_init(void)
 }
 
 int keypad_get_key(void)
-{   
+{
     int r = read_i2c_kbd();
     if (r < 0) {
         return 0;
     }
-    
+
 
     int act_key = 0;
-    
+
     /* Translate the keys to LVGL control characters according to your key definitions */
     switch (r) {
         case 0xb5: // Arrow Up
