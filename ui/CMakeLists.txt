@@ -1,11 +1,7 @@
 project(ui C CXX ASM)
 
-add_subdirectory(lib/pico-vfs)
+add_subdirectory(lib/fatfs)
 add_subdirectory(lib/binary_info_reader)
-
-# Use our ffconf.h and not the one in pico-vfs
-# Saves 60k of code!
-target_include_directories(filesystem_fat BEFORE INTERFACE ${CMAKE_CURRENT_LIST_DIR}/fatfs)
 
 add_executable(ui
   main.c
@@ -26,8 +22,13 @@ pico_set_program_name(ui "uf2load")
 pico_set_program_description(ui "UI for UF2 Loader")
 pico_set_program_version(ui "2.2")
 
+target_include_directories(ui PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+)
+
 target_link_libraries(ui
   pico_stdlib
+  pico_unique_id
   hardware_sync
   hardware_flash
   hardware_irq
@@ -36,9 +37,7 @@ target_link_libraries(ui
   hardware_dma
   i2ckbd
   lcdspi
-  blockdevice_sd
-  filesystem_fat
-  filesystem_vfs
+  fatfs
   boot_uf2_headers
   boot_picobin_headers
   bootloader
@@ -53,3 +52,5 @@ pico_set_binary_type(ui no_flash)
 pico_add_extra_outputs(ui)
 
 target_link_options(ui PRIVATE -Wl,--print-memory-usage)
+
+target_compile_options(ui PRIVATE -DENABLE_RAM_APPS=1)

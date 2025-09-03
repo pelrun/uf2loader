@@ -16,8 +16,6 @@
 // Callback type: invoked when the user makes a final selection. The selected path is passed as an argument.
 typedef void (*final_selection_callback_t)(const char *selected_path);
 
-void text_directory_ui_pre_init(void);
-
 // Initialize the text directory UI. This sets up the SD card filesystem and the display UI.
 // Returns true if initialization succeeded, false otherwise.
 void text_directory_ui_init(void);
@@ -32,12 +30,8 @@ void text_directory_ui_set_final_callback(final_selection_callback_t callback);
 // Public API: Set a status or error message to be displayed in the status bar (auto-clears after 3 seconds)
 void text_directory_ui_set_status(const char *msg);
 
-void text_directory_ui_update_header(uint8_t nosd);
+void text_directory_ui_update_path();
 
 void text_directory_ui_update_title();
-
-void text_directory_ui_draw_default_app();
-
-void process_key_event(int);
 
 #endif // TEXT_DIRECTORY_UI_H

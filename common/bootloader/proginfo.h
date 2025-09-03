@@ -4,6 +4,14 @@
 
 #define PICOCALC_BL_MAGIC 0xe98cc638
 
+enum bootmode_e
+{
+  BOOT_DEFAULT,
+  BOOT_SD,
+  BOOT_UPDATE,
+  BOOT_RAM,
+};
+
 struct bl_info_t
 {
   uint32_t magic;
@@ -31,3 +39,7 @@ void bl_info_set_flash_end(void *flash_end);
 bool bl_app_partition_get_info(void *workarea_base, uint32_t workarea_size, uintptr_t *app_start_offset, uint32_t *app_size);
 void bl_remap_flash(uint32_t offset);
 #endif
+
+// stored in scratch registers, used to send commands to stage3 from ui
+void bl_stage3_command(enum bootmode_e mode, uint32_t arg);
+bool bl_get_command(enum bootmode_e *mode, uint32_t *arg);

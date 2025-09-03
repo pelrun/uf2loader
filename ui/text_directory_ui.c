@@ -30,8 +30,8 @@
 #include "key_event.h"
 #include "text_directory_ui.h"
 #include "debug.h"
-#include <sys/stat.h>
-#include <dirent.h>
+
+#include "ff.h"
 
 #include "proginfo.h"
 
@@ -88,25 +88,20 @@ typedef struct
 
 // Global variables for UI state
 static char current_path[512] = FW_PATH;  // Current directory path
-static dir_entry_t entries[MAX_ENTRIES];      // Directory entries
-static int entry_count = 0;                   // Number of entries in the current directory
+static dir_entry_t entries[MAX_ENTRIES];  // Directory entries
+static int entry_count = 0;               // Number of entries in the current directory
 static int last_selected_index = 0, selected_index = 0;
 static uint8_t page_index = 0;
 static uint8_t last_page_index = 0;
-static uint8_t update_sel = 0;
 static uint8_t update_required = 0;
-static uint32_t status_repeat = 0;
 static char status_message[256] = "";                     // Status message
 static final_selection_callback_t final_callback = NULL;  // Callback for file selection
 static uint32_t last_scrolling = 0;                       // for text scrolling in selected entry
 // Forward declarations
-static void ui_refresh(void);
 static void load_directory(const char *path);
 static void ui_draw_title(void);
-static void ui_draw_path_header(uint8_t);
 static void ui_draw_directory_list(void);
 static void ui_draw_directory_entry(int entry_idx);
-static void ui_update_selected_entry(uint8_t);
 static void ui_draw_status_bar(void);
 static void ui_draw_empty_tip(void);
 static void format_file_size(off_t size, int type, char *buf, size_t buf_size);
@@ -183,7 +178,7 @@ static void get_scrolling_text(const char *text, char *out, size_t out_size, int
   char scroll_buffer[512];
   snprintf(scroll_buffer, sizeof(scroll_buffer), "%s   %s", text, text);
 
-  int scroll_len = strlen(text)+3;
+  int scroll_len = strlen(text) + 3;
   uint32_t time_ms = (time_us_64() / 1000) - last_scrolling;
   int offset = (time_ms / SCROLL_DELAY_MS) % scroll_len;
 
@@ -201,14 +196,17 @@ bool has_suffix(const char *filename, const char *suffix)
   size_t len_filename = strlen(filename);
   size_t len_suffix = strlen(suffix);
   if (len_filename < len_suffix) return false;
-  return strcmp(filename + len_filename - len_suffix, suffix) == 0;
+  return strcasecmp(filename + len_filename - len_suffix, suffix) == 0;
 }
 
 // Load directory entries into the global entries array
 static void load_directory(const char *path)
 {
-  DIR *dir = opendir(path);
-  if (dir == NULL)
+  DIR dir;
+  FILINFO fno;
+
+  FRESULT res = f_opendir(&dir, path);
+  if (res != FR_OK)
   {
     entry_count = 0;
     return;
@@ -216,53 +214,25 @@ static void load_directory(const char *path)
   set_default_entry();
 
   entry_count = 1;
-  struct dirent *ent;
-  while ((ent = readdir(dir)) != NULL && entry_count < MAX_ENTRIES)
+  while ((f_readdir(&dir, &fno)) == FR_OK && entry_count < MAX_ENTRIES)
   {
-    if (ent->d_name[0] == '.') continue;
-    if (has_suffix(ent->d_name, ".uf2") == false) continue;
+    if (fno.fname[0] == 0) break;                                // end of dir
+    if (fno.fname[0] == '.') continue;                           // hide dotfiles
+    if (fno.fattrib & AM_HID || fno.fattrib & AM_SYS) continue;  // hide hidden files
+    if (has_suffix(fno.fname, ".uf2") == false) continue;        // hide non uf2 files
 
-    strlcpy(entries[entry_count].name, ent->d_name, sizeof(entries[entry_count].name));
+    strlcpy(entries[entry_count].name, fno.fname, sizeof(entries[entry_count].name));
 
     // Build full path for stat
     char full_path[512];
-    snprintf(full_path, sizeof(full_path), "%s/%s", path, ent->d_name);
+    snprintf(full_path, sizeof(full_path), "%s/%s", path, fno.fname);
 
     // Determine if the entry is a directory and get file size
-    if (ent->d_type != DT_UNKNOWN)
-    {
-      entries[entry_count].type = (ent->d_type == DT_DIR) ? ENTRY_IS_DIR : ENTRY_IS_FILE;
-
-      // Get file size using stat even if we know the type from d_type
-      struct stat statbuf;
-      if (stat(full_path, &statbuf) == 0)
-      {
-        entries[entry_count].file_size =
-            (entries[entry_count].type == ENTRY_IS_FILE) ? statbuf.st_size : 0;
-      }
-      else
-      {
-        entries[entry_count].file_size = 0;
-      }
-    }
-    else
-    {
-      struct stat statbuf;
-      if (stat(full_path, &statbuf) == 0)
-      {
-        entries[entry_count].type = S_ISDIR(statbuf.st_mode) ? 1 : 0;
-        entries[entry_count].file_size =
-            (entries[entry_count].type == ENTRY_IS_FILE) ? statbuf.st_size : 0;
-      }
-      else
-      {
-        entries[entry_count].type = ENTRY_IS_FILE;
-        entries[entry_count].file_size = 0;
-      }
-    }
+    entries[entry_count].type = (fno.fattrib & AM_DIR) ? ENTRY_IS_DIR : ENTRY_IS_FILE;
+    entries[entry_count].file_size = (fno.fattrib & AM_DIR) ? 0 : fno.fsize;
     entry_count++;
   }
-  closedir(dir);
+  f_closedir(&dir);
   selected_index = 0;
 }
 
@@ -293,10 +263,10 @@ static void ui_draw_empty_tip()
 }
 
 // Draw the current path header
-static void ui_draw_path_header(uint8_t nosd)
+void text_directory_ui_update_path(void)
 {
   char path_header[300];
-  if (nosd)
+  if (!sd_insert_state)
   {
     snprintf(path_header, sizeof(path_header), "SD card not found");
   }
@@ -377,16 +347,36 @@ static void ui_draw_directory_entry(int entry_idx)
  * This is an optimization to avoid redrawing the entire directory list
  * when only the selected entry needs to be updated (e.g., for scrolling text)
  */
-static void ui_update_selected_entry(uint8_t last)
+static void ui_update_selected_entry()
 {
-  uint16_t y = 0;
-  if (last)
+  if (last_selected_index != selected_index)
   {
-    y = entries[last_selected_index % ITEMS_PER_PAGE].y;
+    uint16_t y = entries[last_selected_index % ITEMS_PER_PAGE].y;
     draw_rect_spi(UI_X, y - 1, UI_X + UI_WIDTH - 1, y + FONT_HEIGHT, COLOR_BG);
     ui_draw_directory_entry(last_selected_index);
+    last_selected_index = selected_index;
   }
   ui_draw_directory_entry(selected_index);
+}
+
+static void ui_scroll_selected_entry()
+{
+  static uint32_t last_scroll_update = 0;
+  uint32_t current_time = time_us_64() / 1000;
+
+  // Update scrolling text periodically
+  if (current_time - last_scroll_update > SCROLL_UPDATE_MS)
+  {
+    last_scroll_update = current_time;
+    // Only update the selected entry row if there are entries and a selected item might need
+    // scrolling
+    if (entry_count > 0 && selected_index >= 0 &&
+        strlen(entries[selected_index].name) + (entries[selected_index].type ? 1 : 0) >
+            FILE_NAME_VISIBLE_CHARS)
+    {
+      ui_update_selected_entry();
+    }
+  }
 }
 
 static void ui_clear_directory_list(void)
@@ -405,7 +395,9 @@ static void ui_clear_directory_list(void)
                 COLOR_BG);
 
   entry_count = 1;
+  last_selected_index = 0;
   selected_index = 0;
+  ui_update_selected_entry();
 }
 
 // Draw the directory list
@@ -422,7 +414,6 @@ static void ui_draw_directory_list(void)
                   COLOR_BG);
     last_page_index = page_index;
     update_required = 1;
-    update_sel = 0;
   }
   last_scrolling = time_us_64() / 1000;
   if (update_required)
@@ -434,22 +425,13 @@ static void ui_draw_directory_list(void)
       ui_draw_directory_entry(i);
     }
   }
-  if (update_sel)
-  {
-    DEBUG_PRINT("update selected entry\n");
-    ui_update_selected_entry(update_sel);
-    update_sel = 0;
-  }
+  ui_update_selected_entry();
   update_required = 0;
 }
 
 // Draw the status bar
 static void ui_draw_status_bar(void)
 {
-  if (status_repeat > 1)
-  {
-    return;
-  }
   int y = UI_Y + UI_HEIGHT - STATUS_BAR_HEIGHT;
   draw_rect_spi(UI_X, y, UI_X + UI_WIDTH - 1, UI_Y + UI_HEIGHT - 1, COLOR_BG);
   draw_line_spi(UI_X, y, UI_X + UI_WIDTH - 1, y, COLOR_FG);
@@ -458,8 +440,9 @@ static void ui_draw_status_bar(void)
   draw_text(UI_X + 2, y + 2, truncated_message, COLOR_FG, COLOR_BG);
 }
 
-static void ui_draw_battery_status()
+void text_directory_ui_update_title()
 {
+  // Battery icon
   char buf[8];
   int pcnt = keypad_get_battery();
   if (pcnt < 0) return;
@@ -486,12 +469,8 @@ static void ui_draw_battery_status()
   draw_battery_icon(UI_X + UI_WIDTH - 16, y + 4, level);
 }
 
-// Refresh the entire UI
-static void ui_refresh(void)
+static void ui_set_default_status()
 {
-  ui_draw_title();
-  ui_draw_path_header(0);
-  ui_draw_directory_list();
   if (entry_count == 0)
   {
     text_directory_ui_set_status("Enter to load.");
@@ -499,9 +478,22 @@ static void ui_refresh(void)
   }
   else
   {
-    ui_draw_status_bar();
+    if (sd_insert_state)
+    {
+      text_directory_ui_set_status("Up/Down to select, Enter to load.");
+      // ui_draw_status_bar();
+    }
   }
+}
+
+// Refresh the entire UI
+static void ui_refresh(void)
+{
+  ui_draw_title();
+  text_directory_ui_update_path();
+  ui_draw_directory_list();
   text_directory_ui_update_title();
+  ui_set_default_status();
 }
 
 void move_selection(int dir)
@@ -514,18 +506,41 @@ void move_selection(int dir)
     selected_index += entry_count;
   }
 
-  update_sel = 1;
-
   ui_draw_directory_list();
-  if (sd_insert_state)
+}
+
+void enter_dir(void)
+{
+  char new_path[512];
+  snprintf(new_path, sizeof(new_path), "%s/%s", current_path, entries[selected_index].name);
+  strlcpy(current_path, new_path, sizeof(current_path));
+  load_directory(current_path);
+  text_directory_ui_update_path();
+  ui_draw_directory_list();
+}
+
+void leave_dir(void)
+{
+  if (strcmp(current_path, FW_PATH) != 0)
   {
-    text_directory_ui_set_status("Up/Down to select, Enter to load.");
+    char *last_slash = strrchr(current_path, '/');
+    if (last_slash) *last_slash = '\0';
+    if (current_path[0] == '\0') strlcpy(current_path, FW_PATH, sizeof(current_path));
+    load_directory(current_path);
+    text_directory_ui_update_path();
+    ui_draw_directory_list();
   }
 }
 
 // Handle key events for navigation and selection
-void process_key_event(int key)
+void process_key_event()
 {
+  int key = keypad_get_key();
+  if (key <= 0)
+  {
+    return;
+  }
+
   switch (key)
   {
     case KEY_ARROW_UP:
@@ -545,13 +560,7 @@ void process_key_event(int key)
         switch (entries[selected_index].type)
         {
           case ENTRY_IS_DIR:
-            char new_path[512];
-            snprintf(new_path, sizeof(new_path), "%s/%s", current_path,
-                     entries[selected_index].name);
-            strlcpy(current_path, new_path, sizeof(current_path));
-            load_directory(current_path);
-            ui_draw_path_header(0);
-            ui_draw_directory_list();
+            enter_dir();
             break;
           case ENTRY_IS_LAST_APP:
             if (final_callback)
@@ -571,20 +580,11 @@ void process_key_event(int key)
       }
       break;
     case KEY_BACKSPACE:
-      if (strcmp(current_path, FW_PATH) != 0)
-      {
-        char *last_slash = strrchr(current_path, '/');
-        if (last_slash) *last_slash = '\0';
-        if (current_path[0] == '\0') strlcpy(current_path, FW_PATH, sizeof(current_path));
-        load_directory(current_path);
-        ui_draw_path_header(0);
-        ui_draw_directory_list();
-      }
+      leave_dir();
       break;
     default:
       break;
   }
-  ui_draw_status_bar();
 }
 
 // Public API: Set the final selection callback
@@ -593,32 +593,13 @@ void text_directory_ui_set_final_callback(final_selection_callback_t callback)
   final_callback = callback;
 }
 
-void text_directory_ui_pre_init(void)
-{
-  draw_filled_rect(UI_X, UI_Y, UI_WIDTH, UI_HEIGHT, COLOR_BG);
-  ui_draw_title();
-  ui_draw_path_header(0);
-  ui_draw_directory_list();
-  ui_draw_status_bar();
-}
-
 // Public API: Initialize the UI
 void text_directory_ui_init(void)
 {
-  update_sel = 0;
   update_required = 1;
   draw_filled_rect(UI_X, UI_Y, UI_WIDTH, UI_HEIGHT, COLOR_BG);
   strlcpy(current_path, FW_PATH, sizeof(current_path));
   load_directory(current_path);
-  if (sd_insert_state)
-  {
-    text_directory_ui_set_status("Up/Down to select, Enter to load.");
-    status_repeat = 2;
-  }
-  else
-  {
-    text_directory_ui_set_status("");
-  }
   ui_refresh();
   last_scrolling = time_us_64() / 1000;
 }
@@ -628,25 +609,10 @@ void text_directory_ui_set_status(const char *msg)
 {
   if (strcmp(status_message, msg) == 0)
   {
-    status_repeat++;
-  }
-  else
-  {
-    status_repeat = 0;
+    return;
   }
   strlcpy(status_message, msg, sizeof(status_message));
   ui_draw_status_bar();
-}
-
-void text_directory_ui_update_header(uint8_t nosd) { ui_draw_path_header(nosd); }
-
-void text_directory_ui_update_title() { ui_draw_battery_status(); }
-
-void text_directory_ui_draw_default_app()
-{
-  set_default_entry();
-  // Draw the entry using the helper function
-  ui_draw_directory_entry(0);
 }
 
 void ui_bat_update(void)
@@ -660,33 +626,32 @@ void ui_bat_update(void)
   }
 
   next_bat_update = uptime_ms + BAT_UPDATE_MS;
-  ui_draw_battery_status();
+  text_directory_ui_update_title();
 }
 
-void ui_sd_card_removed()
+void ui_disconnect_sd()
 {
   fs_deinit();
 
-  text_directory_ui_set_status("SD card removed. Please reinsert.");
-  text_directory_ui_update_header(!sd_insert_state);
-  text_directory_ui_update_title();
+  if (!sd_insert_state)
+  {
+    text_directory_ui_set_status("SD card removed.");
+  }
+
+  text_directory_ui_update_path();
   ui_clear_directory_list();
-  update_required = 1;
-  ui_draw_directory_list();
 
   // Wait until the SD card is reinserted
   while (!sd_card_inserted())
   {
-    int key = keypad_get_key();
-    if (key != 0) process_key_event(key);
-
     ui_bat_update();
+    process_key_event();
 
     sleep_ms(20);
   }
 
   // Once reinserted, update the UI and reinitialize filesystem
-  text_directory_ui_set_status("SD card detected. Remounting...");
+  text_directory_ui_set_status("Remounting...");
   bool mounted = false;
   for (int retry = 5; retry > 0 && !mounted; retry--)
   {
@@ -698,51 +663,29 @@ void ui_sd_card_removed()
   {
     text_directory_ui_set_status("Failed to remount SD card!");
     sleep_ms(2000);
-    watchdog_reboot(0, 0, 0);
+    reboot();
   }
 
   // Refresh the directory listing
   load_directory(current_path);
-  ui_draw_path_header(0);
   update_required = 1;
-  ui_draw_directory_list();
-  text_directory_ui_set_status("SD card remounted successfully.");
+
+  ui_refresh();
 }
 
 // Public API: Main event loop for the UI
 void text_directory_ui_run(void)
 {
-  text_directory_ui_update_title();
+  process_key_event();
 
-  uint32_t last_scroll_update = 0;
-  while (true)
+  ui_scroll_selected_entry();
+
+  ui_bat_update();
+
+  // Check for SD card removal during runtime
+  if (!sd_card_inserted()
+  )
   {
-    uint32_t current_time = time_us_64() / 1000;
-    int key = keypad_get_key();
-    if (key != 0) process_key_event(key);
-
-    // Update scrolling text periodically
-    if (current_time - last_scroll_update > SCROLL_UPDATE_MS)
-    {
-      // Only update the selected entry row if there are entries and a selected item might need
-      // scrolling
-      if (entry_count > 0 && selected_index >= 0 &&
-          strlen(entries[selected_index].name) + (entries[selected_index].type ? 1 : 0) >
-              FILE_NAME_VISIBLE_CHARS)
-      {
-        ui_update_selected_entry(0);
-      }
-      last_scroll_update = current_time;
-    }
-
-    ui_bat_update();
-
-    // Check for SD card removal during runtime
-    if (!sd_card_inserted())
-    {
-      ui_sd_card_removed();
-    }
-
-    sleep_ms(20);
+    ui_disconnect_sd();
   }
 }

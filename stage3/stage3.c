@@ -85,13 +85,6 @@ void launch_application_from_ram(void)
 
 #endif
 
-enum bootmode_e
-{
-  BOOT_DEFAULT,
-  BOOT_SD,
-  BOOT_UPDATE,
-};
-
 #define KEY_UP 0xb5
 #define KEY_DOWN 0xb6
 #define KEY_F1 0x81
@@ -133,6 +126,8 @@ enum bootmode_e read_bootmode()
 
 int main()
 {
+  char *filename = LOADER;
+
 #ifdef ENABLE_DEBUG
   stdio_init_all();
 #endif
@@ -140,6 +135,16 @@ int main()
   // FIXME: check SD card insert?
 
   enum bootmode_e mode = read_bootmode();
+
+  uint32_t arg;
+  if (bl_get_command(&mode, &arg))
+  {
+    if (mode == BOOT_RAM)
+    {
+      // Load something other than the UI
+      filename = (char*)arg;
+    }
+  }
 
 #if PICO_RP2350
   if (!bl_app_partition_get_info(workarea, sizeof(workarea), &app_start_offset, &app_size))
@@ -183,7 +188,7 @@ int main()
 
   if (fr == FR_OK)
   {
-    if (load_application_from_uf2(LOADER))
+    if (load_application_from_uf2(filename))
     {
       DEBUG_PRINT("Launch UI\n");
       // launch ui app now in ram

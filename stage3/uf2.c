@@ -154,14 +154,6 @@ static bool check_generic_block(const struct uf2_block* b)
     return false;
   }
 
-  if (b->flags & UF2_FLAG_FAMILY_ID_PRESENT && b->file_size == ABSOLUTE_FAMILY_ID &&
-      b->block_no == 0 && b->num_blocks == 2 && b->target_addr == 0x10FFFF00)
-  {
-    // Skip RP2350-E10 workaround block
-    DEBUG_PRINT("Skip RP2350-E10 block\n");
-    return false;
-  }
-
   // FIXME: make sure to not overwrite our own memory
   // perhaps stick our globals in SCRATCH_Y?
   if (b->target_addr < SRAM_BASE || b->target_addr >= (SRAM_END - 0x2000))

@@ -8,4 +8,6 @@ bool sd_card_inserted(void);
 bool fs_init(void);
 void fs_deinit(void);
 
+void reboot(void);
+
 #endif // __UI_H_

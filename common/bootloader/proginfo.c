@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <hardware/regs/watchdog.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -9,6 +10,7 @@
 #include "pico/bootrom.h"
 #include "boot/picobin.h"
 #include "hardware/flash.h"
+#include "hardware/watchdog.h"
 
 #if PICO_RP2040
 
@@ -185,3 +187,24 @@ void bl_remap_flash(uint32_t offset)
 }
 
 #endif
+
+// stored in scratch registers, used to send commands to stage3 from ui
+void bl_stage3_command(enum bootmode_e mode, uint32_t arg)
+{
+  watchdog_hw->scratch[1] = mode;
+  watchdog_hw->scratch[2] = arg;
+  watchdog_hw->scratch[0] = PICOCALC_BL_MAGIC;
+  watchdog_reboot(0, 0, 0);
+}
+
+bool bl_get_command(enum bootmode_e *mode, uint32_t *arg)
+{
+  if (watchdog_hw->scratch[0] == PICOCALC_BL_MAGIC)
+  {
+    watchdog_hw->scratch[0] = 0; // don't repeat on a reboot
+    *mode = watchdog_hw->scratch[1];
+    *arg = watchdog_hw->scratch[2];
+    return true;
+  }
+  return false;
+}

@@ -19,14 +19,14 @@
 
 #include "hardware/gpio.h"
 #include "debug.h"
+#include "i2ckbd.h"
 #include "lcdspi.h"
 #include <hardware/flash.h>
 #include <hardware/watchdog.h>
 #include "config.h"
 
-#include "blockdevice/sd.h"
-#include "filesystem/fat.h"
-#include "filesystem/vfs.h"
+#include "ff.h"
+
 #include "text_directory_ui.h"
 #include "key_event.h"
 
@@ -34,7 +34,9 @@
 #include "uf2.h"
 #include "ui.h"
 
-#define DEBOUNCE_LIMIT 50
+FATFS fat;
+
+#define DEBOUNCE_LIMIT 25
 
 // SD card guaranteed present on initial startup
 bool sd_insert_state = true;
@@ -66,40 +68,26 @@ bool sd_card_inserted(void)
   return sd_insert_state;
 }
 
-blockdevice_t *sd = NULL;
-filesystem_t *fat = NULL;
-
 void fs_deinit(void)
 {
-  fs_unmount("/");
-  if (fat)
-  {
-    filesystem_fat_free(fat);
-    fat = NULL;
-  }
-  if (sd)
-  {
-    blockdevice_sd_free(sd);
-    sd = NULL;
-  }
+  f_unmount("/");
 }
 
 bool fs_init(void)
 {
   DEBUG_PRINT("fs init SD\n");
-  sd = blockdevice_sd_create(spi0, SD_MOSI_PIN, SD_MISO_PIN, SD_SCLK_PIN, SD_CS_PIN,
-                             125000000 / 2 / 4,  // 15.6MHz
-                             true);
-  fat = filesystem_fat_create();
-  int res = fs_mount("/", fat, sd);
-  if (res < 0)
+  FRESULT res = f_mount(&fat, "/", 1);
+  if (res != FR_OK)
   {
-    DEBUG_PRINT("mount err: %s\n", strerror(errno));
+    DEBUG_PRINT("mount err: %s\n", res);
     fs_deinit();
     return false;
   }
+
   return true;
 }
+
+void reboot(void) { watchdog_reboot(0, 0, 0); }
 
 void load_firmware_by_path(const char *path)
 {
@@ -113,9 +101,8 @@ void load_firmware_by_path(const char *path)
     case UF2_LOADED:
       text_directory_ui_set_status("Launching...");
       DEBUG_PRINT("launching app\n");
-      sleep_ms(100);
       // trigger a reboot - stage3 will launch the app
-      watchdog_reboot(0, 0, 0);
+      reboot();
       break;
     case UF2_WRONG_PLATFORM:
       text_directory_ui_set_status("ERR: Not for this device");
@@ -140,7 +127,7 @@ void final_selection_callback(const char *path)
   if (path == NULL)
   {
     // Reboot into current app
-    watchdog_reboot(0, 0, 0);
+    reboot();
   }
 
   // Trigger firmware loading with the selected path
@@ -159,8 +146,6 @@ void final_selection_callback(const char *path)
 
   snprintf(status_message, sizeof(status_message), "SEL: %s", path);
   text_directory_ui_set_status(status_message);
-
-  sleep_ms(200);
 
   load_firmware_by_path(path);
 }
@@ -187,6 +172,7 @@ int main()
 
     if (!bl_app_partition_get_info(workarea, sizeof(workarea), &app_start_offset, &app_size))
     {
+      // FIXME: this should be an explicit infinite loop...
       return false;
     }
     // After this 0x10000000 should be remapped to the start of the app partition
@@ -202,7 +188,7 @@ int main()
     text_directory_ui_set_status("Failed to mount SD card!");
     DEBUG_PRINT("Failed to mount SD card\n");
     sleep_ms(2000);
-    watchdog_reboot(0, 0, 0);
+    reboot();
   }
 
   text_directory_ui_init();
@@ -215,5 +201,9 @@ int main()
     // drain the keypad input buffer
   }
 
-  text_directory_ui_run();
+  text_directory_ui_update_title();
+  while (true)
+  {
+    text_directory_ui_run();
+  }
 }
