@@ -2,9 +2,9 @@ project(diag C CXX ASM)
 
 add_executable(diag diag.c)
 
-pico_set_program_name(diag "diag")
+pico_set_program_name(diag "bl-diagnostic")
 pico_set_program_description(diag "Diagnostics for uf2loader")
-pico_set_program_version(diag "2.1")
+pico_set_program_version(diag "2.2")
 
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(diag 0)

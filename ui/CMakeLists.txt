@@ -24,7 +24,7 @@ target_compile_options(ui PRIVATE -mno-unaligned-access)
 
 pico_set_program_name(ui "uf2load")
 pico_set_program_description(ui "UI for UF2 Loader")
-pico_set_program_version(ui "2.1")
+pico_set_program_version(ui "2.2")
 
 target_link_libraries(ui
   pico_stdlib
