@@ -6,7 +6,7 @@ set(CMAKE_C_STANDARD 11)
 
 project(lcdspi
         VERSION 0.0.1
-        DESCRIPTION "lcdspi for rp2040."
+        DESCRIPTION "lcdspi for picocalc"
         )
 
 add_library(lcdspi INTERFACE)

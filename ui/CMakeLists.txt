@@ -1,6 +1,5 @@
 project(ui C CXX ASM)
 
-add_subdirectory(lib/lcdspi)
 add_subdirectory(lib/pico-vfs)
 add_subdirectory(lib/binary_info_reader)
 

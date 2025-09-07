@@ -42,6 +42,10 @@ pico_sdk_init()
 
 add_subdirectory(common/i2ckbd i2ckbd)
 add_subdirectory(common/bootloader bootloader)
+add_subdirectory(common/lcdspi lcdspi)
+add_subdirectory(common/petit_fatfs petit_fatfs)
 
 add_subdirectory(stage3)
 add_subdirectory(ui)
+add_subdirectory(diag)
+

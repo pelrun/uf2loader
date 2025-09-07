@@ -1,7 +1,5 @@
 project(stage3 C CXX ASM)
 
-add_subdirectory(lib/petit_fatfs)
-
 add_executable(stage3 stage3.c uf2.c)
 
 pico_set_program_name(stage3 "stage3")
