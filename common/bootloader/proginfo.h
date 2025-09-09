@@ -37,7 +37,7 @@ void bl_info_set_flash_end(void *flash_end);
 
 #if PICO_RP2350
 bool bl_app_partition_get_info(void *workarea_base, uint32_t workarea_size, uintptr_t *app_start_offset, uint32_t *app_size);
-void bl_remap_flash(uint32_t offset);
+void bl_remap_flash(uint32_t offset, uint32_t size);
 #endif
 
 // stored in scratch registers, used to send commands to stage3 from ui

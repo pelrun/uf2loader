@@ -37,24 +37,6 @@ static struct bl_info_t *proginfo = (void *)PICOCALC_PROGINFO_ADDR;
 
 bool bl_proginfo_valid(void) { return (proginfo->magic == PICOCALC_BL_MAGIC); }
 
-#if 0
-// This is only for use by the application, not the bootloader or ui
-// here for documentation purposes only
-
-// Get the size of the available application space on the flash device
-// TODO: read the current partition size instead if running on an RP2350
-
-size_t bl_proginfo_flash_size(void)
-{
-  if (bl_proginfo_valid())
-  {
-    return proginfo->flash_end;
-  }
-
-  return PICO_FLASH_SIZE_BYTES;
-}
-#endif
-
 const char *bl_proginfo_filename()
 {
 #if PICO_RP2040
@@ -177,12 +159,36 @@ bool bl_app_partition_get_info(void *workarea_base, uint32_t workarea_size,
 
 #include "hardware/structs/qmi.h"
 
-void bl_remap_flash(uint32_t offset)
-{
-  uint32_t sector_count = offset >> 12;  // 4k sectors
+// make sure the 0th window's value can be safely used for all windows
+static_assert(QMI_ATRANS0_BASE_LSB == QMI_ATRANS1_BASE_LSB, "ATRANS definitions no longer valid");
+static_assert(QMI_ATRANS0_SIZE_LSB == QMI_ATRANS1_SIZE_LSB, "ATRANS definitions no longer valid");
+static_assert(QMI_ATRANS0_SIZE_RESET == QMI_ATRANS1_SIZE_RESET,
+              "ATRANS definitions no longer valid");
 
-  qmi_hw->atrans[0] = ((QMI_ATRANS0_SIZE_RESET - sector_count) << QMI_ATRANS0_SIZE_LSB) |
-                      (sector_count << QMI_ATRANS0_BASE_LSB);
+void bl_remap_flash(uint32_t offset, uint32_t size)
+{
+  uint32_t sector_offset = offset >> 12;  // 4k sectors
+
+  unsigned int base_reset[] = {QMI_ATRANS0_BASE_RESET, QMI_ATRANS1_BASE_RESET,
+                               QMI_ATRANS2_BASE_RESET, QMI_ATRANS3_BASE_RESET};
+
+  int size_remaining = size>>12;
+
+  for (int i = 0; i < 4; i++)
+  {
+    // Offset entire 16MB range
+    qmi_hw->atrans[i] = ((base_reset[i] + sector_offset) << QMI_ATRANS0_BASE_RESET);
+    if (size_remaining >= (int)QMI_ATRANS0_SIZE_RESET)
+    {
+      qmi_hw->atrans[i] |= (QMI_ATRANS0_SIZE_RESET << QMI_ATRANS0_SIZE_LSB);
+    }
+    else if (size_remaining > 0)
+    {
+      qmi_hw->atrans[i] |= (size_remaining << QMI_ATRANS0_SIZE_LSB);
+    }
+    size_remaining -= QMI_ATRANS0_SIZE_RESET;
+  }
+
   rom_flash_flush_cache();
 }
 
@@ -201,10 +207,38 @@ bool bl_get_command(enum bootmode_e *mode, uint32_t *arg)
 {
   if (watchdog_hw->scratch[0] == PICOCALC_BL_MAGIC)
   {
-    watchdog_hw->scratch[0] = 0; // don't repeat on a reboot
-    *mode = watchdog_hw->scratch[1];
-    *arg = watchdog_hw->scratch[2];
+    watchdog_hw->scratch[0] = 0;  // don't repeat on a reboot
+    *mode                   = watchdog_hw->scratch[1];
+    *arg                    = watchdog_hw->scratch[2];
     return true;
   }
   return false;
 }
+
+#if 0
+// These are only for use by the application, not the bootloader or ui
+// here for documentation purposes only
+
+size_t bl_proginfo_flash_size(void)
+{
+  if (bl_proginfo_valid())
+  {
+    return proginfo->flash_end;
+  }
+
+  return PICO_FLASH_SIZE_BYTES;
+}
+
+// lazier version
+
+int flash_size(void)
+{
+#if PICO_RP2040
+  return PICO_FLASH_SIZE_BYTES - 4 * FLASH_SECTOR_SIZE;
+#else
+  uint32_t offset = ((qmi_hw->atrans[0] & QMI_ATRANS0_BASE_BITS) >> QMI_ATRANS0_BASE_LSB) * FLASH_SECTOR_SIZE;
+  return PICO_FLASH_SIZE_BYTES - offset;
+#endif
+}
+
+#endif

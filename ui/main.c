@@ -176,7 +176,7 @@ int main()
       return false;
     }
     // After this 0x10000000 should be remapped to the start of the app partition
-    bl_remap_flash(app_start_offset);
+    bl_remap_flash(app_start_offset, app_size);
   }
 #endif
 
