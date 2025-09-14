@@ -28,11 +28,9 @@ target_compile_definitions(diag PRIVATE
 # Add the standard library to the build
 target_link_libraries(diag
     pico_stdlib
-    boot_picobin_headers
     hardware_gpio
     petit_fatfs
     i2ckbd
-    bootloader
     lcdspi
 )
 

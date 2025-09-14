@@ -2,7 +2,6 @@
 #include <pico/time.h>
 
 #include "i2ckbd.h"
-#include "proginfo.h"
 
 #include "lcdspi.h"
 #include "pff.h"
@@ -59,21 +58,23 @@ char *read_bootmode() {
 
 #define UI_Y(line) (20 + 12 * (line))
 
-static inline void fail(int line) {
-  lcd_set_cursor(UI_X + 200, UI_Y(line + 2));
+#define STEP_Y(line) (UI_Y(line + 4))
+
+static inline void fail(int step) {
+  lcd_set_cursor(UI_X + 200, STEP_Y(step));
   lcd_print_string_color("FAIL", RED, BLACK);
   infinite_loop();
 }
 
-static inline void pass(int line) {
-  lcd_set_cursor(UI_X + 200, UI_Y(line + 4));
+static inline void pass(int step) {
+  lcd_set_cursor(UI_X + 200, STEP_Y(step));
   lcd_print_string_color("PASS", GREEN, BLACK);
 }
 
 static inline void check_keypress(void) {
   char *keypress = read_bootmode();
   lcd_set_cursor(UI_X + 200, UI_Y(8));
-  //draw_rect_spi(UI_X+200, UI_Y(8), 320, UI_Y(9), BLACK);
+  // draw_rect_spi(UI_X+200, UI_Y(8), 320, UI_Y(9), BLACK);
   lcd_print_string_color(keypress, GREEN, BLACK);
 }
 
@@ -89,15 +90,16 @@ int main() {
   lcd_init();
 
   lcd_set_cursor(UI_X, UI_Y(0));
-  lcd_print_string_color("UF2 Loader Diagnostics " PICO_PROGRAM_VERSION_STRING, WHITE, BLACK);
+  lcd_print_string_color("UF2 Loader Diagnostics " PICO_PROGRAM_VERSION_STRING,
+                         WHITE, BLACK);
 
-  lcd_set_cursor(UI_X, UI_Y(4));
+  lcd_set_cursor(UI_X, STEP_Y(0));
   lcd_print_string_color("SD card init...", WHITE, BLACK);
 
-  lcd_set_cursor(UI_X, UI_Y(5));
+  lcd_set_cursor(UI_X, STEP_Y(1));
   lcd_print_string_color(LOADER " open...", WHITE, BLACK);
 
-  lcd_set_cursor(UI_X, UI_Y(6));
+  lcd_set_cursor(UI_X, STEP_Y(2));
   lcd_print_string_color(LOADER " read...", WHITE, BLACK);
 
   FATFS fs;
