@@ -29,8 +29,8 @@
 // modified for Raspberry Pi Pico by KenKen (Use hardware SPI)
 // further modified for petit fatfs by pelrun
 
-#include "ff.h"     /* Basic definitions of FatFs */
-#include "diskio.h" /* Declarations FatFs MAI */
+// #include "ff.h"     /* Basic definitions of FatFs */
+// #include "diskio.h" /* Declarations FatFs MAI */
 
 /*-------------------------------------------------------------------------*/
 /* Platform dependent macros and functions needed to be modified           */
@@ -39,6 +39,8 @@
 #include "pico/time.h"
 #include "hardware/gpio.h"
 #include "hardware/spi.h"
+
+#include "sdmmc.h"
 
 #define SD_SPICH spi0
 #define SD_SPI_MISO 16
@@ -90,16 +92,16 @@
 #define CT_SDC 0x0C   /* SD */
 #define CT_BLOCK 0x10 /* Block addressing */
 
-static DSTATUS Stat = STA_NOINIT; /* Disk status */
+static bool Status = false; /* Disk status */
 
-static BYTE CardType; /* b0:MMC, b1:SDv1, b2:SDv2, b3:Block addressing */
+static uint8_t CardType; /* b0:MMC, b1:SDv1, b2:SDv2, b3:Block addressing */
 
 /*-----------------------------------------------------------------------*/
 /* Transmit bytes to the card                                            */
 /*-----------------------------------------------------------------------*/
 
-static void xmit_mmc(const BYTE *buff, /* Data to be sent */
-                     UINT bc           /* Number of bytes to send */
+static void xmit_mmc(const uint8_t *buff, /* Data to be sent */
+                     unsigned int bc      /* Number of bytes to send */
 )
 {
   spi_write_blocking(SD_SPICH, buff, bc);
@@ -109,8 +111,8 @@ static void xmit_mmc(const BYTE *buff, /* Data to be sent */
 /* Receive bytes from the card                                           */
 /*-----------------------------------------------------------------------*/
 
-static void rcvr_mmc(BYTE *buff, /* Pointer to read buffer */
-                     UINT bc     /* Number of bytes to receive */
+static void rcvr_mmc(uint8_t *buff,  /* Pointer to read buffer */
+                     unsigned int bc /* Number of bytes to receive */
 )
 {
   spi_read_blocking(SD_SPICH, 0xFF, buff, bc);
@@ -122,8 +124,8 @@ static void rcvr_mmc(BYTE *buff, /* Pointer to read buffer */
 
 static int wait_ready(void) /* 1:OK, 0:Timeout */
 {
-  BYTE d;
-  UINT tmr;
+  uint8_t d;
+  unsigned int tmr;
 
   for (tmr = 5000; tmr; tmr--)
   { /* Wait for ready in timeout of 500ms */
@@ -141,7 +143,7 @@ static int wait_ready(void) /* 1:OK, 0:Timeout */
 
 static void deselect(void)
 {
-  BYTE d;
+  uint8_t d;
 
   CS_H();          /* Set CS# high */
   rcvr_mmc(&d, 1); /* Dummy clock (force DO hi-z for multiple slave SPI) */
@@ -153,7 +155,7 @@ static void deselect(void)
 
 static int select(void) /* 1:OK, 0:Timeout */
 {
-  BYTE d;
+  uint8_t d;
 
   CS_L();                     /* Set CS# low */
   rcvr_mmc(&d, 1);            /* Dummy clock (force DO enabled) */
@@ -167,15 +169,14 @@ static int select(void) /* 1:OK, 0:Timeout */
 /* Receive a data packet from the card                                   */
 /*-----------------------------------------------------------------------*/
 
-static int rcvr_datablock(            /* 1:OK, 0:Failed */
-                          BYTE *buff, /* Data buffer to store received data */
-                          UINT btr    /* Byte count */
+static int rcvr_datablock(                 /* 1:OK, 0:Failed */
+                          uint8_t *buff,   /* Data buffer to store received data */
+                          unsigned int btr /* Byte count */
 )
 {
-  BYTE d[2];
-  UINT tmr;
+  uint8_t d[2];
 
-  for (tmr = 1000; tmr; tmr--)
+  for (int tmr = 1000; tmr; tmr--)
   { /* Wait for data packet in timeout of 100ms */
     rcvr_mmc(d, 1);
     if (d[0] != 0xFF) break;
@@ -193,12 +194,12 @@ static int rcvr_datablock(            /* 1:OK, 0:Failed */
 /* Send a data packet to the card                                        */
 /*-----------------------------------------------------------------------*/
 
-static int xmit_datablock(                  /* 1:OK, 0:Failed */
-                          const BYTE *buff, /* 512 byte data block to be transmitted */
-                          BYTE token        /* Data/Stop token */
+static int xmit_datablock(                     /* 1:OK, 0:Failed */
+                          const uint8_t *buff, /* 512 byte data block to be transmitted */
+                          uint8_t token        /* Data/Stop token */
 )
 {
-  BYTE d[2];
+  uint8_t d[2];
 
   if (!wait_ready()) return 0;
 
@@ -220,12 +221,12 @@ static int xmit_datablock(                  /* 1:OK, 0:Failed */
 /* Send a command packet to the card                                     */
 /*-----------------------------------------------------------------------*/
 
-static BYTE send_cmd(          /* Returns command response (bit7==1:Send failed)*/
-                     BYTE cmd, /* Command byte */
-                     DWORD arg /* Argument */
+static uint8_t send_cmd(             /* Returns command response (bit7==1:Send failed)*/
+                        uint8_t cmd, /* Command byte */
+                        uint32_t arg /* Argument */
 )
 {
-  BYTE n, d, buf[6];
+  uint8_t n, d, buf[6];
 
   if (cmd & 0x80)
   { /* ACMD<n> is the command sequense of CMD55-CMD<n> */
@@ -242,14 +243,14 @@ static BYTE send_cmd(          /* Returns command response (bit7==1:Send failed)
   }
 
   /* Send a command packet */
-  buf[0] = 0x40 | cmd;        /* Start + Command index */
-  buf[1] = (BYTE)(arg >> 24); /* Argument[31..24] */
-  buf[2] = (BYTE)(arg >> 16); /* Argument[23..16] */
-  buf[3] = (BYTE)(arg >> 8);  /* Argument[15..8] */
-  buf[4] = (BYTE)arg;         /* Argument[7..0] */
-  n = 0x01;                   /* Dummy CRC + Stop */
-  if (cmd == CMD0) n = 0x95;  /* (valid CRC for CMD0(0)) */
-  if (cmd == CMD8) n = 0x87;  /* (valid CRC for CMD8(0x1AA)) */
+  buf[0] = 0x40 | cmd;           /* Start + Command index */
+  buf[1] = (uint8_t)(arg >> 24); /* Argument[31..24] */
+  buf[2] = (uint8_t)(arg >> 16); /* Argument[23..16] */
+  buf[3] = (uint8_t)(arg >> 8);  /* Argument[15..8] */
+  buf[4] = (uint8_t)arg;         /* Argument[7..0] */
+  n = 0x01;                      /* Dummy CRC + Stop */
+  if (cmd == CMD0) n = 0x95;     /* (valid CRC for CMD0(0)) */
+  if (cmd == CMD8) n = 0x87;     /* (valid CRC for CMD8(0x1AA)) */
   buf[5] = n;
   xmit_mmc(buf, 6);
 
@@ -272,17 +273,16 @@ static BYTE send_cmd(          /* Returns command response (bit7==1:Send failed)
 /* Get Disk Status                                                       */
 /*-----------------------------------------------------------------------*/
 
-DSTATUS MMC_disk_status() { return Stat; }
+bool MMC_disk_ready() { return Status; }
 
 /*-----------------------------------------------------------------------*/
 /* Initialize Disk Drive                                                 */
 /*-----------------------------------------------------------------------*/
 
-DSTATUS MMC_disk_initialize(void)
+bool MMC_disk_initialize(void)
 {
-  BYTE n, ty, cmd, buf[4];
-  UINT tmr;
-  DSTATUS s;
+  uint8_t n, ty, cmd, buf[4];
+  unsigned int tmr;
 
   sleep_us(10000); /* 10ms */
 
@@ -341,33 +341,33 @@ DSTATUS MMC_disk_initialize(void)
     }
   }
   CardType = ty;
-  s = ty ? 0 : STA_NOINIT;
-  Stat = s;
+  Status = CardType != 0;
 
   deselect();
 
-  if (Stat != STA_NOINIT)
+  if (Status)
   {
     // switch to fast spi clock
     spi_init(SD_SPICH, SD_SPI_BAUDRATE);
   }
 
-  return s;
+  return Status;
 }
 
 /*-----------------------------------------------------------------------*/
 /* Read Sector(s)                                                        */
 /*-----------------------------------------------------------------------*/
 
-DRESULT MMC_disk_read(BYTE *buff,   /* Pointer to the data buffer to store read data */
-                      DWORD sector, /* Start sector number (LBA) */
-                      UINT count    /* Sector count (1..128) */
+bool MMC_disk_read(uint8_t *buff,     /* Pointer to the data buffer to store read data */
+                   int sector,        /* Start sector number (LBA) */
+                   unsigned int count /* Sector count (1..128) */
 )
 {
-  BYTE cmd;
-  DWORD sect = (DWORD)sector;
+  uint8_t cmd;
+  uint32_t sect = (uint32_t)sector;
 
-  if (MMC_disk_status() & STA_NOINIT) return RES_NOTRDY;
+  if (!MMC_disk_ready()) return false;
+
   if (!(CardType & CT_BLOCK)) sect *= 512; /* Convert LBA to byte address if needed */
 
   cmd = count > 1 ? CMD18 : CMD17; /*  READ_MULTIPLE_BLOCK : READ_SINGLE_BLOCK */
@@ -382,21 +382,22 @@ DRESULT MMC_disk_read(BYTE *buff,   /* Pointer to the data buffer to store read 
   }
   deselect();
 
-  return count ? RES_ERROR : RES_OK;
+  return (count == 0);
 }
 
 /*-----------------------------------------------------------------------*/
 /* Write Sector(s)                                                       */
 /*-----------------------------------------------------------------------*/
 
-DRESULT MMC_disk_write(const BYTE *buff, /* Pointer to the data to be written */
-                       DWORD sector,     /* Start sector number (LBA) */
-                       UINT count        /* Sector count (1..128) */
+bool MMC_disk_write(const uint8_t *buff, /* Pointer to the data to be written */
+                    int sector,          /* Start sector number (LBA) */
+                    unsigned int count   /* Sector count (1..128) */
 )
 {
-  DWORD sect = (DWORD)sector;
+  uint32_t sect = (uint32_t)sector;
 
-  if (MMC_disk_status() & STA_NOINIT) return RES_NOTRDY;
+  if (!MMC_disk_ready()) return false;
+
   if (!(CardType & CT_BLOCK)) sect *= 512; /* Convert LBA to byte address if needed */
 
   if (count == 1)
@@ -421,59 +422,52 @@ DRESULT MMC_disk_write(const BYTE *buff, /* Pointer to the data to be written */
   }
   deselect();
 
-  return count ? RES_ERROR : RES_OK;
+  return (count == 0);
 }
 
 /*-----------------------------------------------------------------------*/
 /* Miscellaneous Functions                                               */
 /*-----------------------------------------------------------------------*/
 
-DRESULT MMC_disk_ioctl(
-                   BYTE ctrl, /* Control code */
-                   void *buff /* Buffer to send/receive control data */
-)
+bool MMC_sync(void)
 {
-  DRESULT res;
-  BYTE n, csd[16];
-  DWORD cs;
+  bool res;
 
-  if (MMC_disk_status() & STA_NOINIT) return RES_NOTRDY; /* Check if card is in the socket */
+  if (!MMC_disk_ready()) return false;
 
-  res = RES_ERROR;
-  switch (ctrl)
-  {
-    case CTRL_SYNC: /* Make sure that no pending write process */
-      if (select()) res = RES_OK;
-      break;
-
-    case GET_SECTOR_COUNT: /* Get number of sectors on the disk (DWORD) */
-      if ((send_cmd(CMD9, 0) == 0) && rcvr_datablock(csd, 16))
-      {
-        if ((csd[0] >> 6) == 1)
-        { /* SDC ver 2.00 */
-          cs = csd[9] + ((WORD)csd[8] << 8) + ((DWORD)(csd[7] & 63) << 16) + 1;
-          *(DWORD *)buff = cs << 10;
-        }
-        else
-        { /* SDC ver 1.XX or MMC */
-          n = (csd[5] & 15) + ((csd[10] & 128) >> 7) + ((csd[9] & 3) << 1) + 2;
-          cs = (csd[8] >> 6) + ((WORD)csd[7] << 2) + ((WORD)(csd[6] & 3) << 10) + 1;
-          *(DWORD *)buff = cs << (n - 9);
-        }
-        res = RES_OK;
-      }
-      break;
-
-    case GET_BLOCK_SIZE: /* Get erase block size in unit of sector (DWORD) */
-      *(DWORD *)buff = 128;
-      res = RES_OK;
-      break;
-
-    default:
-      res = RES_PARERR;
-  }
+  res = select();
 
   deselect();
 
   return res;
+}
+
+uint32_t MMC_get_block_size(void) { return 128; }
+
+int32_t MMC_get_sector_count(void)
+{
+  uint8_t n, csd[16];
+  uint32_t cs;
+  int32_t count = -1;
+
+  if (!MMC_disk_ready()) return -1;
+
+  if ((send_cmd(CMD9, 0) == 0) && rcvr_datablock(csd, 16))
+  {
+    if ((csd[0] >> 6) == 1)
+    { /* SDC ver 2.00 */
+      cs = csd[9] + ((uint16_t)csd[8] << 8) + ((uint32_t)(csd[7] & 63) << 16) + 1;
+      count = cs << 10;
+    }
+    else
+    { /* SDC ver 1.XX or MMC */
+      n = (csd[5] & 15) + ((csd[10] & 128) >> 7) + ((csd[9] & 3) << 1) + 2;
+      cs = (csd[8] >> 6) + ((uint16_t)csd[7] << 2) + ((uint16_t)(csd[6] & 3) << 10) + 1;
+      count = cs << (n - 9);
+    }
+  }
+
+  deselect();
+
+  return count;
 }

@@ -37,6 +37,11 @@
 
 #include "ui.h"
 
+#if ENABLE_USB
+#include "usb_msc.h"
+#include "tusb.h"
+#endif
+
 // UI Layout Constants
 #define UI_WIDTH 280
 #define UI_HEIGHT 280
@@ -637,6 +642,12 @@ void ui_disconnect_sd()
   {
     text_directory_ui_set_status("SD card removed.");
   }
+#if ENABLE_USB
+  else if (usb_msc_is_mounted())
+  {
+    text_directory_ui_set_status("USB is connected");
+  }
+#endif
 
   text_directory_ui_update_path();
   ui_clear_directory_list();
@@ -649,6 +660,15 @@ void ui_disconnect_sd()
 
     sleep_ms(20);
   }
+
+#if ENABLE_USB
+  // Run mass storage until usb is disconnected
+  while (usb_msc_is_mounted())
+  {
+    tud_task();
+    __wfi();
+  }
+#endif
 
   // Once reinserted, update the UI and reinitialize filesystem
   text_directory_ui_set_status("Remounting...");
@@ -684,6 +704,9 @@ void text_directory_ui_run(void)
 
   // Check for SD card removal during runtime
   if (!sd_card_inserted()
+#if ENABLE_USB
+      || usb_msc_is_mounted()
+#endif
   )
   {
     ui_disconnect_sd();

@@ -1,6 +1,8 @@
 project(ui C CXX ASM)
 
+add_subdirectory(lib/sdmmc)
 add_subdirectory(lib/fatfs)
+add_subdirectory(lib/usb_msc)
 add_subdirectory(lib/binary_info_reader)
 
 add_executable(ui
@@ -42,6 +44,7 @@ target_link_libraries(ui
   boot_picobin_headers
   bootloader
   pr_binary_info_reader
+  usb_msc
 )
 
 pico_enable_stdio_usb(ui 0)
@@ -53,4 +56,4 @@ pico_add_extra_outputs(ui)
 
 target_link_options(ui PRIVATE -Wl,--print-memory-usage)
 
-target_compile_options(ui PRIVATE -DENABLE_RAM_APPS=1)
+target_compile_options(ui PRIVATE -DENABLE_RAM_APPS=1 -DENABLE_USB=1)

@@ -30,7 +30,7 @@ DSTATUS disk_status(BYTE pdrv /* Physical drive number to identify the drive */
   switch (pdrv)
   {
     case DEV_MMC:
-      return MMC_disk_status();
+      return MMC_disk_ready() ? 0 : STA_NOINIT;
     default:
       return STA_NOINIT;
   }
@@ -46,7 +46,7 @@ DSTATUS disk_initialize(BYTE pdrv /* Physical drive number to identify the drive
   switch (pdrv)
   {
     case DEV_MMC:
-      return MMC_disk_initialize();
+      return MMC_disk_initialize() ? 0 : STA_NOINIT;
     default:
       return STA_NOINIT;
   }
@@ -65,7 +65,8 @@ DRESULT disk_read(BYTE pdrv,    /* Physical drive number to identify the drive *
   switch (pdrv)
   {
     case DEV_MMC:
-      return MMC_disk_read(buff, sector, count);
+      if (!MMC_disk_ready()) return RES_NOTRDY;
+      return MMC_disk_read(buff, sector, count) ? RES_OK : RES_ERROR;
     default:
       return RES_PARERR;
   }
@@ -86,7 +87,8 @@ DRESULT disk_write(BYTE pdrv,        /* Physical drive number to identify the dr
   switch (pdrv)
   {
     case DEV_MMC:
-      return MMC_disk_write(buff, sector, count);
+      if (!MMC_disk_ready()) return RES_NOTRDY;
+      return MMC_disk_write(buff, sector, count) ? RES_OK : RES_ERROR;
     default:
       return RES_PARERR;
   }
@@ -103,11 +105,30 @@ DRESULT disk_ioctl(BYTE pdrv, /* Physical drive number (0..) */
                    void *buff /* Buffer to send/receive control data */
 )
 {
-  switch (pdrv)
+  if (pdrv != DEV_MMC) return RES_PARERR;
+
+  if (!MMC_disk_ready()) return RES_NOTRDY;
+
+  switch (cmd)
   {
-    case DEV_MMC:
-      return MMC_disk_ioctl(cmd, buff);
+    case CTRL_SYNC: /* Make sure that no pending write process */
+      return MMC_sync() ? RES_OK : RES_ERROR;
+
+    case GET_SECTOR_COUNT: /* Get number of sectors on the disk (uint32_t) */
+    {
+      int32_t count = MMC_get_sector_count();
+      if (count > 0) {
+        *(int32_t*)buff = count;
+        return RES_OK;
+      }
+    }
+    case GET_BLOCK_SIZE: /* Get erase block size in unit of sector (uint32_t) */
+      *(uint32_t *)buff = 128;
+      return RES_OK;
+
     default:
-      return RES_PARERR;
+      break;
   }
+
+  return RES_ERROR;
 }

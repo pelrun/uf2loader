@@ -200,7 +200,6 @@ void bl_stage3_command(enum bootmode_e mode, uint32_t arg)
   watchdog_hw->scratch[1] = mode;
   watchdog_hw->scratch[2] = arg;
   watchdog_hw->scratch[0] = PICOCALC_BL_MAGIC;
-  watchdog_reboot(0, 0, 0);
 }
 
 bool bl_get_command(enum bootmode_e *mode, uint32_t *arg)

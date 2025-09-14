@@ -17,8 +17,8 @@
 #include "proginfo.h"
 #include "text_directory_ui.h"
 #include "uf2.h"
-
 #include "ff.h"
+#include "ui.h"
 
 uintptr_t prog_area_end;
 
@@ -342,7 +342,8 @@ static bool check_generic_block(const struct uf2_block* b)
     if (sfn_path)
     {
       text_directory_ui_set_status("Launching RAM-only app");
-      bl_stage3_command(BOOT_RAM, (uintptr_t)sfn_path);  // noreturn
+      bl_stage3_command(BOOT_RAM, (uintptr_t)sfn_path);
+      reboot();
     }
     return false;
   }

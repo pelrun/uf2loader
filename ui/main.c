@@ -27,6 +27,11 @@
 
 #include "ff.h"
 
+#if ENABLE_USB
+#include "usb_msc.h"
+#include "tusb.h"
+#endif
+
 #include "text_directory_ui.h"
 #include "key_event.h"
 
@@ -68,10 +73,7 @@ bool sd_card_inserted(void)
   return sd_insert_state;
 }
 
-void fs_deinit(void)
-{
-  f_unmount("/");
-}
+void fs_deinit(void) { f_unmount("/"); }
 
 bool fs_init(void)
 {
@@ -87,7 +89,14 @@ bool fs_init(void)
   return true;
 }
 
-void reboot(void) { watchdog_reboot(0, 0, 0); }
+void reboot(void) {
+#if ENABLE_USB
+  usb_msc_init();
+#endif
+  fs_deinit();
+
+  watchdog_reboot(0, 0, 0);
+}
 
 void load_firmware_by_path(const char *path)
 {
@@ -191,6 +200,10 @@ int main()
     reboot();
   }
 
+#if ENABLE_USB
+  usb_msc_init();
+#endif
+
   text_directory_ui_init();
   text_directory_ui_set_final_callback(final_selection_callback);
 
@@ -205,5 +218,8 @@ int main()
   while (true)
   {
     text_directory_ui_run();
+#if ENABLE_USB
+    tud_task();
+#endif
   }
 }
