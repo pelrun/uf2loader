@@ -6,6 +6,12 @@
     <img src="img/uf2loader.jpg" alt="UF2 Loader" width="80%">
 </div>
 
+## Features
+
+* Runs standard UF2 files built by the pico-sdk without modification (if the app does not itself write to flash)
+* Can load binaries compiled with pico-sdk's `no-flash` flag into RAM and execute them without erasing the currently flashed app.
+* USB Mass Storage support for accessing the SD card from a PC.
+
 ## Compilation
 Clone the source code and initialize the submodules.
 
@@ -49,6 +55,9 @@ If the menu cannot be loaded for any reason (no SD card, BOOTnnnn.UF2 not found,
 
 On the RP2350 only, UF2 files can also be written to the Pico in BOOTSEL mode or via Picotool as normal and will automatically be placed in the app partition.
 
+To use the USB Mass Storage mode, connect the PC to the pico's micro-usb port *after* the UI has been entered. Eject or unplug the usb cable to resume using the menu.
+If the Pico is connected to the PC before turning on PicoCalc, the Pico will power up before the keyboard is available and things will get confused. Unplug and power-cycle the PicoCalc, enter the menu, then connect USB.
+
 ## Technical Implementation Notes
 On the RP2040, the top 16k of flash is occupied and must not be overwritten by the application. 8k is for the bootloader, and 8k is used by the bluetooth stack on the W.
 
@@ -59,15 +68,12 @@ If the magic number (`0xe98cc638`) is present at `XIP_BASE+0x110`, then the word
 On the RP2350, a flash partition is used, and the application can't directly overwrite (or even see) the bootloader in the normal case (please use RP2350's `rom_flash_op` instead of the old `flash_range_erase/flash_range_program` apis, which do not care about the partition table.) The application can get the size of the partition via the bootrom API. (see `bl_app_partition_get_info()` in proginfo.c for an implementation.)
 
 ## Credits
-- [Hiroyuki Oyama](https://github.com/oyama/pico-sdcard-boot): Special thanks for the firmware loader mechanism and VFS file system.
-  - https://github.com/oyama/pico-sdcard-boot
-  - https://github.com/oyama/pico-vfs
-- [TheKiwil](https://github.com/TheKiwil/): Special thanks for contributions on supporting pico2 boards with new custom linker script.
-- [muzkr](https://github.com/muzkr/hachi/): Special thanks for the original boot2/high-mem implementation
-- [adwuard](https://github.com/adwuard/Picocalc_SD_Boot): Special thanks for the original Picocalc SD Boot application that UF2 Loader is heavily based on.
+- [adwuard](https://github.com/adwuard/Picocalc_SD_Boot): Special thanks for the Picocalc SD Boot application that UF2 Loader is heavily based on.
+- [Hiroyuki Oyama](https://github.com/oyama/pico-sdcard-boot): Special thanks for the bootloader that SD-Boot is based on.
+- [muzkr](https://github.com/muzkr/hachi/): Special thanks for the boot2/high-mem code
 - [cuu](https://github.com/clockworkpi/PicoCalc): Various UI improvements taken from their SD Boot fork
 - [nipo](https://github.com/nipo/picore): Pico Binary Information parser library
-- [Elm-ChaN](https://elm-chan.org/): because everyone uses their FatFS and Petit FatFS libraries. E. v. e. r. y. o. n. e.
+- [ChaN](https://elm-chan.org/): because everyone uses their FatFS and Petit FatFS libraries. E. v. e. r. y. o. n. e.
 
 ## Read More
 - Forum Page and Discussion: [Clockwork Pi Forum](https://forum.clockworkpi.com/t/uf2-loader-release/18479)
