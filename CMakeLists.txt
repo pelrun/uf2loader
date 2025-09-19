@@ -11,7 +11,7 @@ set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "-specs=nano.specs")
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/../output)
 
-set(PROJECT_VERSION "2.2")
+set(PROJECT_VERSION "2.3")
 
 # Initialise pico_sdk from installed location
 # (note this can come from environment, CMake cache etc)
@@ -30,7 +30,7 @@ if (EXISTS ${picoVscode})
     include(${picoVscode})
 endif()
 # ====================================================================================
-set(PICO_BOARD pico CACHE STRING "Board type")
+set(PICO_BOARD pico2 CACHE STRING "Board type")
 
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)

@@ -4,7 +4,7 @@ add_executable(stage3 stage3.c uf2.c)
 
 pico_set_program_name(stage3 "stage3")
 pico_set_program_description(stage3 "BL for UF2 Loader")
-pico_set_program_version(stage3 "2.2")
+pico_set_program_version(stage3 "2.3")
 
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(stage3 0)

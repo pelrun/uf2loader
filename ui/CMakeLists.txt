@@ -22,7 +22,7 @@ target_compile_options(ui PRIVATE -mno-unaligned-access)
 
 pico_set_program_name(ui "uf2load")
 pico_set_program_description(ui "UI for UF2 Loader")
-pico_set_program_version(ui "2.2")
+pico_set_program_version(ui "2.3")
 
 target_include_directories(ui PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
