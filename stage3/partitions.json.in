@@ -14,7 +14,7 @@
             "name": "App",
             "id": 1,
             "start": "8K",
-            "size": "4088K",
+            "size": "@part_size_kb@K",
             "families": ["rp2350-arm-ns", "rp2350-arm-s", "rp2350-riscv"],
             "permissions": {
                 "secure": "rw",

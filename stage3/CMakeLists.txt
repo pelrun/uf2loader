@@ -13,8 +13,16 @@ pico_enable_stdio_rtt(stage3 0)
 
 pico_minimize_runtime(stage3)
 
-if (PICO_BOARD MATCHES "^pico(_w)?$")
-  set_target_properties(stage3 PROPERTIES OUTPUT_NAME "bootloader_pico")
+set_target_properties(stage3 PROPERTIES OUTPUT_NAME "bootloader_${PICO_BOARD}")
+
+math(EXPR part_size_kb "${PICO_FLASH_SIZE_BYTES} / 1024 - 8")
+
+# Partition has to avoid the top 4k of a 16MB flash due to RP2350-E10 workaround
+if(part_size_kb GREATER 16372)
+  set(part_size_kb 16372)
+endif()
+
+if (PICO_PLATFORM MATCHES "^rp2040")
 
   pico_define_boot_stage2(boot2_custom "${CMAKE_CURRENT_SOURCE_DIR}/boot2_custom.S")
   pico_set_boot_stage2(stage3 boot2_custom)
@@ -23,18 +31,25 @@ if (PICO_BOARD MATCHES "^pico(_w)?$")
   pico_set_linker_script(stage3 ${CMAKE_CURRENT_SOURCE_DIR}/memmap_2040.ld)
   target_compile_definitions(boot2_custom PRIVATE BOOTLOADER_START=0x101fc000)
 
-else()
-  set_target_properties(stage3 PROPERTIES OUTPUT_NAME "bootloader_pico2")
+elseif(PICO_PLATFORM MATCHES "^rp2350")
 
   pico_set_linker_script(stage3 ${CMAKE_CURRENT_SOURCE_DIR}/memmap_2350.ld)
 
-  pico_embed_pt_in_binary(stage3 ${CMAKE_CURRENT_LIST_DIR}/partitions.json)
+  configure_file(partitions.json.in partitions.json @ONLY)
+  pico_embed_pt_in_binary(stage3 ${CMAKE_CURRENT_BINARY_DIR}/partitions.json)
 
   # create absolute uf2, and package in flash
   pico_set_uf2_family(stage3 "absolute")
   pico_package_uf2_output(stage3 0x10000000)
 
+else()
+  message(FATAL_ERROR "PICO_PLATFORM not supported: " ${PICO_PLATFORM})
 endif()
+
+message("PICO_BOARD: " ${PICO_BOARD})
+message("PICO_PLATFORM: " ${PICO_PLATFORM})
+message("PICO_FLASH_SIZE_BYTES: " ${PICO_FLASH_SIZE_BYTES})
+message("part_size_kb: " ${part_size_kb})
 
 pico_add_extra_outputs(stage3)
 
