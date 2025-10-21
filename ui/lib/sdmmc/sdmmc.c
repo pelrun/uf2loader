@@ -127,11 +127,11 @@ static int wait_ready(void) /* 1:OK, 0:Timeout */
   uint8_t d;
   unsigned int tmr;
 
-  for (tmr = 5000; tmr; tmr--)
+  for (tmr = 50000; tmr; tmr--)
   { /* Wait for ready in timeout of 500ms */
     rcvr_mmc(&d, 1);
     if (d == 0xFF) break;
-    sleep_us(100);
+    sleep_us(10);
   }
 
   return tmr ? 1 : 0;
@@ -307,10 +307,10 @@ bool MMC_disk_initialize(void)
       rcvr_mmc(buf, 4); /* Get trailing return value of R7 resp */
       if (buf[2] == 0x01 && buf[3] == 0xAA)
       { /* The card can work at vdd range of 2.7-3.6V */
-        for (tmr = 1000; tmr; tmr--)
+        for (tmr = 10000; tmr; tmr--)
         { /* Wait for leaving idle state (ACMD41 with HCS bit) */
           if (send_cmd(ACMD41, 1UL << 30) == 0) break;
-          sleep_us(1000);
+          sleep_us(10);
         }
         if (tmr && send_cmd(CMD58, 0) == 0)
         { /* Check CCS bit in the OCR */
@@ -331,10 +331,10 @@ bool MMC_disk_initialize(void)
         ty = CT_MMC3;
         cmd = CMD1; /* MMCv3 */
       }
-      for (tmr = 1000; tmr; tmr--)
+      for (tmr = 10000; tmr; tmr--)
       { /* Wait for leaving idle state */
         if (send_cmd(cmd, 0) == 0) break;
-        sleep_us(1000);
+        sleep_us(10);
       }
       if (!tmr || send_cmd(CMD16, 512) != 0) /* Set R/W block length to 512 */
         ty = 0;
