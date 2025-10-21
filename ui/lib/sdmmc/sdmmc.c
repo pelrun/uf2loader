@@ -194,27 +194,37 @@ static int rcvr_datablock(                 /* 1:OK, 0:Failed */
 /* Send a data packet to the card                                        */
 /*-----------------------------------------------------------------------*/
 
-static int xmit_datablock(                     /* 1:OK, 0:Failed */
-                          const uint8_t *buff, /* 512 byte data block to be transmitted */
-                          uint8_t token        /* Data/Stop token */
+static int _xmit_datablock(                     /* 1:OK, 0:Failed */
+                    const uint8_t *buff, /* data block to be transmitted */
+                    uint8_t token,       /* Data/Stop token */
+                    unsigned int len,    /* length of the data block */
+                    bool wait            /* Skip waitingg*/
 )
 {
-  uint8_t d[2];
+  uint8_t d[3];
 
-  if (!wait_ready()) return 0;
+  if (wait)
+    if(!wait_ready()) return 0;
 
   d[0] = token;
   xmit_mmc(d, 1); /* Xmit a token */
   if (token != 0xFD)
   {                            /* Is it data token? */
-    xmit_mmc(buff, 512);       /* Xmit the 512 byte data block to MMC */
-    rcvr_mmc(d, 2);            /* Xmit dummy CRC (0xFF,0xFF) */
-    rcvr_mmc(d, 1);            /* Receive data response */
-    if ((d[0] & 0x1F) != 0x05) /* If not accepted, return with error */
+    xmit_mmc(buff, len);       /* Xmit the 512 byte data block to MMC */
+    rcvr_mmc(d, 3);            /* Xmit dummy CRC (0xFF,0xFF); Receive data response */
+    if ((d[2] & 0x1F) != 0x05) /* If not accepted, return with error */
       return 0;
   }
 
   return 1;
+}
+
+static int xmit_datablock( /* Wrapper function */
+                          const uint8_t *buff,
+                          uint8_t token
+)
+{
+    return _xmit_datablock(buff, token, 512, true);
 }
 
 /*-----------------------------------------------------------------------*/
@@ -370,16 +380,21 @@ bool MMC_disk_read(uint8_t *buff,     /* Pointer to the data buffer to store rea
 
   if (!(CardType & CT_BLOCK)) sect *= 512; /* Convert LBA to byte address if needed */
 
-  cmd = count > 1 ? CMD18 : CMD17; /*  READ_MULTIPLE_BLOCK : READ_SINGLE_BLOCK */
-  if (send_cmd(cmd, sect) == 0)
+  if (count > 1)
   {
-    do
-    {
-      if (!rcvr_datablock(buff, 512)) break;
-      buff += 512;
-    } while (--count);
-    if (cmd == CMD18) send_cmd(CMD12, 0); /* STOP_TRANSMISSION */
+    cmd = CMD18;
+    send_cmd(CMD23, count);
   }
+  else
+  {
+    cmd = CMD17;
+  }
+
+  if (send_cmd(cmd, sect) == 0) {
+    rcvr_datablock(buff, count * 512);
+    count = 0;
+  }
+
   deselect();
 
   return (count == 0);
@@ -409,15 +424,13 @@ bool MMC_disk_write(const uint8_t *buff, /* Pointer to the data to be written */
   else
   { /* Multiple block write */
     if (CardType & CT_SDC) send_cmd(ACMD23, count);
+    send_cmd(CMD23, count);
     if (send_cmd(CMD25, sect) == 0)
     { /* WRITE_MULTIPLE_BLOCK */
-      do
-      {
-        if (!xmit_datablock(buff, 0xFC)) break;
-        buff += 512;
-      } while (--count);
-      if (!xmit_datablock(0, 0xFD)) /* STOP_TRAN token */
-        count = 1;
+      _xmit_datablock(buff, 0xFC, count * 512, false);
+      count = 0;
+      // if (!_xmit_datablock(0, 0xFD, 512, false)) /* STOP_TRAN token */
+      //   count = 1;
     }
   }
   deselect();
