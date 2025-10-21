@@ -429,21 +429,6 @@ bool MMC_disk_write(const uint8_t *buff, /* Pointer to the data to be written */
 /* Miscellaneous Functions                                               */
 /*-----------------------------------------------------------------------*/
 
-bool MMC_sync(void)
-{
-  bool res;
-
-  if (!MMC_disk_ready()) return false;
-
-  res = select();
-
-  deselect();
-
-  return res;
-}
-
-uint32_t MMC_get_block_size(void) { return 128; }
-
 int32_t MMC_get_sector_count(void)
 {
   uint8_t n, csd[16];
