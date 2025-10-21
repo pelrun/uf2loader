@@ -296,8 +296,8 @@ bool MMC_disk_initialize(void)
   CS_H();
   gpio_set_dir(SD_SPI_CS, GPIO_OUT);
 
-  for (n = 10; n; n--)
-    rcvr_mmc(buf, 1); /* Apply 80 dummy clocks and the card gets ready to receive command */
+  for (n = 20; n; n--)
+    rcvr_mmc(buf, 4); /* Apply 80 dummy clocks and the card gets ready to receive command */
 
   ty = 0;
   if (send_cmd(CMD0, 0) == 1)
