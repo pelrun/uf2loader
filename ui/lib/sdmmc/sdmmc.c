@@ -48,7 +48,7 @@
 #define SD_SPI_SCK 18
 #define SD_SPI_MOSI 19
 
-#define SD_SPI_BAUDRATE_INIT (300 * 1000)
+#define SD_SPI_BAUDRATE_INIT (400 * 1000)
 #define SD_SPI_BAUDRATE (20 * 1000 * 1000)
 
 #define CS_H() gpio_put(SD_SPI_CS, 1) /* Set MMC CS "high" */
@@ -286,7 +286,7 @@ bool MMC_disk_initialize(void)
 
   sleep_us(10000); /* 10ms */
 
-  // Enable SPI at 300khz and connect to GPIOs
+  // Enable SPI at 400khz and connect to GPIOs
   spi_init(SD_SPICH, SD_SPI_BAUDRATE_INIT);
   gpio_set_function(SD_SPI_MISO, GPIO_FUNC_SPI);
   gpio_set_function(SD_SPI_MOSI, GPIO_FUNC_SPI);
