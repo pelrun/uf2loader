@@ -176,11 +176,11 @@ static int rcvr_datablock(                 /* 1:OK, 0:Failed */
 {
   uint8_t d[2];
 
-  for (int tmr = 1000; tmr; tmr--)
+  for (int tmr = 10000; tmr; tmr--)
   { /* Wait for data packet in timeout of 100ms */
     rcvr_mmc(d, 1);
     if (d[0] != 0xFF) break;
-    sleep_us(100);
+    sleep_us(10);
   }
   if (d[0] != 0xFE) return 0; /* If not valid data token, return with error */
 
