@@ -2,6 +2,10 @@
 #include "i2ckbd.h"
 #include "debug.h"
 
+#if ENABLE_USB
+#include "tusb.h"
+#endif
+
 static uint8_t i2c_inited = 0;
 
 void init_i2c_kbd() {
@@ -30,7 +34,15 @@ int read_i2c_kbd() {
         return -1;
     }
 
+#if ENABLE_USB
+    // Wait 16ms but service USB during the wait
+    for (int i = 0; i < 32; i++) {
+        sleep_us(500);
+        tud_task();
+    }
+#else
     sleep_ms(16);
+#endif
     retval = i2c_read_timeout_us(I2C_KBD_MOD, I2C_KBD_ADDR, (unsigned char *) &buff, 2, false, 500000);
     if (retval == PICO_ERROR_GENERIC || retval == PICO_ERROR_TIMEOUT) {
         DEBUG_PRINT("I2C read err\n");
@@ -70,7 +82,15 @@ int read_battery() {
         DEBUG_PRINT("Batt I2C write err\n");
         return -1;
     }
+#if ENABLE_USB
+    // Wait 16ms but service USB during the wait
+    for (int i = 0; i < 32; i++) {
+        sleep_us(500);
+        tud_task();
+    }
+#else
     sleep_ms(16);
+#endif
     retval = i2c_read_timeout_us(I2C_KBD_MOD, I2C_KBD_ADDR, (unsigned char *) &buff, 2, false, 500000);
     if (retval == PICO_ERROR_GENERIC || retval == PICO_ERROR_TIMEOUT) {
         DEBUG_PRINT("Batt I2C read err\n");
