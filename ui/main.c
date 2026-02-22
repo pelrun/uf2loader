@@ -218,8 +218,5 @@ int main()
   while (true)
   {
     text_directory_ui_run();
-#if ENABLE_USB
-    tud_task();
-#endif
   }
 }

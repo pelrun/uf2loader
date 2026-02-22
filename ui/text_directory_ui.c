@@ -634,42 +634,8 @@ void ui_bat_update(void)
   text_directory_ui_update_title();
 }
 
-void ui_disconnect_sd()
+void ui_sd_remount()
 {
-  fs_deinit();
-
-  if (!sd_insert_state)
-  {
-    text_directory_ui_set_status("SD card removed.");
-  }
-#if ENABLE_USB
-  else if (usb_msc_is_mounted())
-  {
-    text_directory_ui_set_status("USB is connected");
-  }
-#endif
-
-  text_directory_ui_update_path();
-  ui_clear_directory_list();
-
-  // Wait until the SD card is reinserted
-  while (!sd_card_inserted())
-  {
-    ui_bat_update();
-    process_key_event();
-
-    sleep_ms(20);
-  }
-
-#if ENABLE_USB
-  // Run mass storage until usb is disconnected
-  while (usb_msc_is_mounted())
-  {
-    tud_task();
-    __wfi();
-  }
-#endif
-
   // Once reinserted, update the UI and reinitialize filesystem
   text_directory_ui_set_status("Remounting...");
   bool mounted = false;
@@ -693,6 +659,48 @@ void ui_disconnect_sd()
   ui_refresh();
 }
 
+void ui_sd_removed()
+{
+  fs_deinit();
+
+  text_directory_ui_set_status("SD card removed.");
+
+  text_directory_ui_update_path();
+  ui_clear_directory_list();
+
+  // Wait until the SD card is reinserted
+  while (!sd_card_inserted())
+  {
+    ui_bat_update();
+    process_key_event();
+
+    sleep_ms(20);
+  }
+
+  ui_sd_remount();
+}
+
+#if ENABLE_USB
+void ui_usb_mount()
+{
+  fs_deinit();
+
+  text_directory_ui_set_status("USB is connected");
+
+  //text_directory_ui_update_path();
+  ui_clear_directory_list();
+
+  // Run mass storage until usb is disconnected
+  while (usb_msc_is_mounted())
+  {
+    tud_task();
+    __wfe();
+  }
+
+  ui_sd_remount();
+}
+#endif
+
 // Public API: Main event loop for the UI
 void text_directory_ui_run(void)
 {
@@ -703,12 +711,17 @@ void text_directory_ui_run(void)
   ui_bat_update();
 
   // Check for SD card removal during runtime
-  if (!sd_card_inserted()
-#if ENABLE_USB
-      || usb_msc_is_mounted()
-#endif
-  )
+  if (!sd_card_inserted())
   {
-    ui_disconnect_sd();
+    ui_sd_removed();
   }
+#if ENABLE_USB
+  tud_task();
+
+  if (usb_msc_is_mounted())
+  {
+    ui_usb_mount();
+  }
+#endif
+
 }
