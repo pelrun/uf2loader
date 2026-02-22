@@ -4,7 +4,7 @@ add_executable(diag diag.c)
 
 pico_set_program_name(diag "bl-diagnostic")
 pico_set_program_description(diag "Diagnostics for uf2loader")
-pico_set_program_version(diag "2.3")
+pico_set_program_version(diag "${VERSION_STRING}")
 
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(diag 0)

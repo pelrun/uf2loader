@@ -11,7 +11,8 @@ set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "-specs=nano.specs")
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/../output)
 
-set(PROJECT_VERSION "2.3")
+set(PROJECT_VERSION "2.4")
+set(VERSION_STRING "${PROJECT_VERSION}")
 
 # Initialise pico_sdk from installed location
 # (note this can come from environment, CMake cache etc)
