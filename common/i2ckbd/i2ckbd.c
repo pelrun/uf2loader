@@ -8,7 +8,7 @@
 void sleep(int ms) {
     int iterations = ms * 2;
     for (int i = 0; i < iterations; i++) {
-        sleep_us(599);
+        sleep_us(500);
         tud_task();
     }
 }
@@ -46,7 +46,7 @@ int read_i2c_kbd() {
         return -1;
     }
 
-    sleep_ms(16);
+    sleep(16);
 
     retval = i2c_read_timeout_us(I2C_KBD_MOD, I2C_KBD_ADDR, (unsigned char *) &buff, 2, false, 500000);
     if (retval == PICO_ERROR_GENERIC || retval == PICO_ERROR_TIMEOUT) {
