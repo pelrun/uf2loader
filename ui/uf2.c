@@ -25,12 +25,12 @@ uintptr_t prog_area_end;
 typedef struct
 {
   const char* filename;
-  uint32_t prog_addr;
   uint32_t num_blks;
   uint32_t num_blks_read;
   uint32_t num_blks_written;
   uint32_t family_id;
   bool malformed_uf2;  // indicates a badly formed pico2 uf2
+  uint8_t erased_sectors[512]; // covers up to 16MB of flash (4096 sectors × 4KB)
 } prog_state_t;
 
 static struct uf2_block _block_buf __attribute((aligned(256)));
@@ -71,7 +71,9 @@ bool handle_boot_stage2(const struct uf2_block* b)
   uint8_t boot2[BOOT2_SIZE];
   memcpy(boot2, (void*)XIP_BASE, BOOT2_SIZE);
 
-  FLASH_ERASE(XIP_BASE, b->num_blocks * b->payload_size);
+  // Only erase sector 0; all other sectors are erased on demand via ensure_sector_erased()
+  FLASH_ERASE(XIP_BASE, FLASH_SECTOR_SIZE);
+  s.erased_sectors[0] |= 1; // mark sector 0 as erased in the bitmap
   FLASH_PROG(XIP_BASE, boot2, BOOT2_SIZE);
 
   if (b->target_addr != XIP_BASE)
@@ -117,6 +119,30 @@ static inline int FLASH_PROG(uintptr_t address, const void* buf, uint32_t size_b
 bool handle_boot_stage2(const struct uf2_block* b) { return false; }
 
 #endif
+
+// Erase the sector containing 'address', if not already erased.
+// Uses a bitmap in prog_state_t to avoid erasing the same sector twice.
+static int ensure_sector_erased(uintptr_t address)
+{
+  uintptr_t sector_base = address & ~((uintptr_t)(FLASH_SECTOR_SIZE - 1));
+  uint32_t sector_idx = (sector_base - XIP_BASE) / FLASH_SECTOR_SIZE;
+  if (sector_idx >= sizeof(s.erased_sectors) * 8)
+  {
+    DEBUG_PRINT("Sector index %d out of bitmap range\n", sector_idx);
+    return -1;
+  }
+
+  uint32_t byte_idx = sector_idx / 8;
+  uint8_t bit_mask = 1u << (sector_idx % 8);
+
+  if (s.erased_sectors[byte_idx] & bit_mask)
+    return 0; // already erased
+
+  int ret = FLASH_ERASE(sector_base, FLASH_SECTOR_SIZE);
+  if (ret >= 0)
+    s.erased_sectors[byte_idx] |= bit_mask;
+  return ret;
+}
 
 char* get_short_path(const char* path)
 {
@@ -210,6 +236,12 @@ enum uf2_result_e __attribute__((optimize("-O0"))) load_application_from_uf2(con
       // if block contains proginfo area, set it to all 0xFF's
       bl_proginfo_clear(b->data, b->target_addr, b->payload_size);
 
+      if (ensure_sector_erased(b->target_addr) < 0)
+      {
+        DEBUG_PRINT("Erase failed for block %d\n", b->block_no);
+        return UF2_UNKNOWN;
+      }
+
       FLASH_PROG(b->target_addr, b->data, FLASH_PAGE_SIZE);
 
       s.num_blks_written++;
@@ -224,10 +256,9 @@ enum uf2_result_e __attribute__((optimize("-O0"))) load_application_from_uf2(con
         continue;
       }
 
-      text_directory_ui_set_status("Erasing flash...");
       if (!handle_boot_stage2(b))
       {
-        if (FLASH_ERASE(b->target_addr, s.num_blks * b->payload_size) < 0)
+        if (ensure_sector_erased(b->target_addr) < 0)
         {
           // Don't even attempt to program if the erase fails
           return UF2_UNKNOWN;
@@ -236,7 +267,6 @@ enum uf2_result_e __attribute__((optimize("-O0"))) load_application_from_uf2(con
         FLASH_PROG(b->target_addr, b->data, FLASH_PAGE_SIZE);
       }
 
-      s.prog_addr = b->target_addr;
       s.num_blks_written++;
     }
   }
@@ -371,12 +401,6 @@ static bool check_1st_block(const struct uf2_block* b)
     return false;
   }
 
-  if (b->target_addr + FLASH_PAGE_SIZE * s.num_blks > prog_area_end)
-  {
-    DEBUG_PRINT("Requested range exceeds flash area\n");
-    return false;
-  }
-
   return true;
 }
 
@@ -392,10 +416,6 @@ static bool check_block(const prog_state_t* s, const struct uf2_block* b)
     return false;
   }
   if (s->num_blks_written != b->block_no - (s->malformed_uf2 ? 1 : 0))
-  {
-    return false;
-  }
-  if (s->prog_addr + FLASH_PAGE_SIZE * s->num_blks_written != b->target_addr)
   {
     return false;
   }
