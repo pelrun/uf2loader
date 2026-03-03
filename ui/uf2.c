@@ -100,8 +100,8 @@ static inline int FLASH_ERASE(uintptr_t address, uint32_t size_bytes)
                                  (CFLASH_SECLEVEL_VALUE_SECURE << CFLASH_SECLEVEL_LSB) |
                                  (CFLASH_ASPACE_VALUE_RUNTIME << CFLASH_ASPACE_LSB)};
 
-  // Round up size_bytes or rom_flash_op will throw an alignment error
-  uint32_t size_aligned = (size_bytes + 0x1FFF) & -FLASH_SECTOR_SIZE;
+  // Round up size_bytes to the next sector boundary
+  uint32_t size_aligned = (size_bytes + FLASH_SECTOR_SIZE - 1) & -FLASH_SECTOR_SIZE;
 
   return rom_flash_op(cflash_flags, address, size_aligned, NULL);
 }
@@ -238,7 +238,7 @@ enum uf2_result_e __attribute__((optimize("-O0"))) load_application_from_uf2(con
 
       if (ensure_sector_erased(b->target_addr) < 0)
       {
-        DEBUG_PRINT("Erase failed for block %d\n", b->block_no);
+        DEBUG_PRINT("Erase failed for block %d at address 0x%08x\n", b->block_no, b->target_addr);
         return UF2_UNKNOWN;
       }
 
