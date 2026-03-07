@@ -1,0 +1,83 @@
+name: CMake
+
+on:
+  push:
+    branches:
+      - non-contiguous-uf2
+  pull_request:
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build:
+    name: Build UF2 artifacts (pico2)
+    runs-on: ubuntu-latest
+
+    env:
+      PICO_SDK_PATH: ${{github.workspace}}/pico-sdk
+
+    steps:
+    - name: Compiler Cache
+      uses: actions/cache@v4
+      with:
+        path: /home/runner/.ccache
+        key: ccache-cmake-${{github.ref}}-${{github.sha}}
+        restore-keys: |
+          ccache-cmake-${{github.ref}}
+          ccache-cmake
+
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        path: src
+        submodules: recursive
+
+    - name: Checkout Pico SDK
+      uses: actions/checkout@v4
+      with:
+        ref: '2.2.0'
+        repository: raspberrypi/pico-sdk
+        path: pico-sdk
+        submodules: true
+
+    - name: Install Arm GNU Toolchain (arm-none-eabi-gcc)
+      uses: carlosperate/arm-none-eabi-gcc-action@v1
+      with:
+        release: '13.3.Rel1'
+
+    - name: Install CCache
+      run: sudo apt update && sudo apt install -y ccache
+
+    - name: Configure CMake
+      run: |
+        cmake -E make_directory ${{runner.workspace}}/build
+        cmake -S ${{github.workspace}}/src -B ${{runner.workspace}}/build \
+          -DPICO_SDK_PATH=${{github.workspace}}/pico-sdk \
+          -DPICO_BOARD=pico2 \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+    - name: Build
+      working-directory: ${{runner.workspace}}/build
+      run: |
+        ccache --zero-stats || true
+        cmake --build . --config $BUILD_TYPE -j$(nproc)
+        ccache --show-stats || true
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: uf2loader-pico2
+        path: ${{runner.workspace}}/output/*.uf2
+
+    # ── Update rolling latest release ────────────────────────────────────────
+    - name: Update latest release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/non-contiguous-uf2'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: latest
+        name: Latest Build
+        prerelease: true
+        make_latest: 'true'
+        files: ${{runner.workspace}}/output/*.uf2
