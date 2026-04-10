@@ -3,7 +3,7 @@ name: CMake
 on:
   push:
     branches:
-      - non-contiguous-uf2
+      - main
   pull_request:
 
 env:
@@ -11,6 +11,10 @@ env:
 
 jobs:
   build:
+    strategy:
+      matrix:
+        board: [pico, pico2]
+
     name: Build UF2 artifacts (pico2)
     runs-on: ubuntu-latest
 
@@ -54,7 +58,7 @@ jobs:
         cmake -E make_directory ${{runner.workspace}}/build
         cmake -S ${{github.workspace}}/src -B ${{runner.workspace}}/build \
           -DPICO_SDK_PATH=${{github.workspace}}/pico-sdk \
-          -DPICO_BOARD=pico2 \
+          -DPICO_BOARD=${{matrix.board}} \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
@@ -68,12 +72,12 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: uf2loader-pico2
+        name: uf2loader-${{matrix.board}}
         path: ${{runner.workspace}}/output/*.uf2
 
     # ── Update rolling latest release ────────────────────────────────────────
     - name: Update latest release
-      if: github.event_name == 'push' && github.ref == 'refs/heads/non-contiguous-uf2'
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       uses: softprops/action-gh-release@v2
       with:
         tag_name: latest
