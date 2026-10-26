@@ -134,8 +134,9 @@ int main()
 
   // FIXME: check SD card insert?
 
-  enum bootmode_e mode = read_bootmode();
+  enum bootmode_e mode;
 
+  // A command overrides any key held, so only wait for a key without one
   uint32_t arg;
   if (bl_get_command(&mode, &arg))
   {
@@ -144,6 +145,10 @@ int main()
       // Load something other than the UI
       filename = (char*)arg;
     }
+  }
+  else
+  {
+    mode = read_bootmode();
   }
 
 #if PICO_RP2350

@@ -114,16 +114,16 @@ static void rcvr_mmc(BYTE *buff, /* Pointer to read buffer */
 static int wait_ready(void) /* 1:OK, 0:Timeout */
 {
   BYTE d;
-  UINT tmr;
+  /* Poll without sleeping: the card only makes progress while it is clocked */
+  absolute_time_t until = make_timeout_time_ms(500);
 
-  for (tmr = 5000; tmr; tmr--)
+  do
   { /* Wait for ready in timeout of 500ms */
     rcvr_mmc(&d, 1);
-    if (d == 0xFF) break;
-    sleep_us(100);
-  }
+    if (d == 0xFF) return 1;
+  } while (!time_reached(until));
 
-  return tmr ? 1 : 0;
+  return 0;
 }
 
 /*-----------------------------------------------------------------------*/
@@ -164,14 +164,13 @@ static int rcvr_datablock(            /* 1:OK, 0:Failed */
 )
 {
   BYTE d[2];
-  UINT tmr;
+  /* Poll without sleeping: the card only makes progress while it is clocked */
+  absolute_time_t until = make_timeout_time_ms(100);
 
-  for (tmr = 1000; tmr; tmr--)
+  do
   { /* Wait for data packet in timeout of 100ms */
     rcvr_mmc(d, 1);
-    if (d[0] != 0xFF) break;
-    sleep_us(100);
-  }
+  } while (d[0] == 0xFF && !time_reached(until));
   if (d[0] != 0xFE) return 0; /* If not valid data token, return with error */
 
   rcvr_mmc(buff, btr); /* Receive the data block into buffer */
